@@ -109,10 +109,14 @@ Mark an item `[x]` only once it has been verified, not just written.
   so the 1s poll issues a scan plus a commit whenever it finds anything.
   Belongs on a periodic task, not the read path.
 
-- [ ] **11. Unbounded upload into memory.** `notes.py:30` does
+- [~] **11. Unbounded upload into memory.** `notes.py:30` does
   `await file.read()` with no size cap, then hashes the same content twice
   (lines 31, 45). Also uses `SessionLocal` directly instead of
   `Depends(get_db)`, and returns the server-side `filepath` to the browser.
+
+  The replacement path is already correct: `/api/render` streams to disk with a
+  `MAX_UPLOAD_MB` cap. `notes.py` dies with the server-side generation flow, so
+  fix it only if that flow outlives expectations.
 
 - [ ] **12. `Dockerfile:42` installs `libgl1-mesa-glx`,** removed in Debian 12
   — and `python:3.12-slim` is bookworm. Unverified (no Docker daemon

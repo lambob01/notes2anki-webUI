@@ -37,7 +37,24 @@ To serve the SPA from FastAPI when running the backend alone, copy `frontend/dis
 
 **One FastAPI process on port 8080** serves `/api/*` and the built Vite SPA from `backend/static` (`main.py` mounts the SPA fallback *last* so it never shadows an API route; `api/` paths still 404 as JSON). Same-origin in prod, so CORS is opt-in via `CORS_ORIGINS` and `frontend/src/lib/api.ts` uses **relative URLs only**.
 
+### `POST /api/render` — the stateless render endpoint
+
+`routers/render.py`. Takes a document, returns one base64 JPEG per slide plus
+the whole document's text, and **keeps nothing** — the upload lives in a
+`TemporaryDirectory` deleted before the response is sent. This is the server
+half of the client-side direction: the browser can rasterize a PDF itself but
+cannot run LibreOffice, so PPTX is the only reason a server exists at all.
+
+It is unauthenticated by design, so it holds nothing worth stealing and bounds
+every input that costs CPU or memory (`MAX_UPLOAD_MB`, DPI clamped 72–300,
+upload streamed rather than `read()` into memory, filename never used as a
+path). Don't add state, credentials, or outbound requests to it — that's the
+whole security argument. Blocking work goes through `run_in_threadpool`.
+
 ### Generation pipeline (`routers/generate.py` → `services/` → `llm/`)
+
+Still live, still what the current UI uses; slated for removal once the browser
+owns generation.
 
 1. `routers/notes.py` stores the upload under a content-hash filename in `UPLOAD_DIR` and reports whether that file's slides were already processed.
 2. `POST /api/generate/from-file` creates a `Generation` row and hands `_run_generation` to FastAPI `BackgroundTasks` — **in-process**, so it dies with the server (see recovery below).

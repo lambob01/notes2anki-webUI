@@ -141,6 +141,32 @@ LibreOffice → PDF → PyMuPDF path, the title/blank heuristics, `has_visual`, 
 of it. That file is the hardest part of this codebase and it does not get
 rewritten.
 
+**Built** (`app/routers/render.py`, mounted at `/api/render`). Additive: the
+six existing routers still serve the current server-side app and get deleted
+once the browser owns generation. Verified against the real
+`CE10232 - TCA - 5 - Biology.pptx` through LibreOffice — 27 slides, all valid
+JPEG, 8.2k characters of extracted text, and no temp directory surviving the
+request.
+
+Response shape is `{filename, slide_count, text, slides: [{index, notes,
+media_type, image_b64}]}`. `text` is the whole document, for the browser's
+global-context syllabus pass. Images are inline base64 rather than URLs
+specifically because a URL would mean keeping the file, which is the one thing
+this service must not do.
+
+Hardened for being unauthenticated: upload streamed to disk with a
+`MAX_UPLOAD_MB` cap (default 150) rather than `await file.read()`, DPI clamped
+to 72–300 so a caller cannot choose the memory cost, the client's filename
+never used as a path, and the blocking LibreOffice/PyMuPDF work pushed to a
+worker thread so one big deck cannot stall the event loop.
+
+**Known limit, measured:** that 27-slide deck produced an 11.6MB single JSON
+body (~320KB per slide at 150 DPI, plus base64's 33%). A 100-slide deck would
+be ~40MB. Streaming NDJSON per slide is the obvious fix and would also let the
+browser start generating cards for slide 0 while slide 40 is still rendering —
+worth doing, but not a regression, since the current server also renders every
+slide before generating any.
+
 Everything else moves to TypeScript: the two LLM adapters (~280 lines, thin),
 prompt assembly, the `_extract_cards_json` salvage parser, `latex.py`
 normalization, and `.apkg` generation (sql.js + JSZip — an `.apkg` is a zip

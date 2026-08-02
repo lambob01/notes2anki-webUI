@@ -12,7 +12,7 @@ from app.database import (
     encrypt_legacy_api_keys,
     ensure_columns,
 )
-from app.routers import providers, templates, notes, generate, cards, export
+from app.routers import providers, templates, notes, generate, cards, export, render
 
 Base.metadata.create_all(bind=engine)
 ensure_columns()
@@ -39,6 +39,10 @@ app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
 app.include_router(generate.router, prefix="/api/generate", tags=["generate"])
 app.include_router(cards.router, prefix="/api/cards", tags=["cards"])
 app.include_router(export.router, prefix="/api/export", tags=["export"])
+# The stateless render endpoint the client-side app talks to. Additive for now:
+# the routers above still serve the existing server-side app, and get removed
+# once the browser owns generation. See "Client-side direction" in PLAN.md.
+app.include_router(render.router, prefix="/api/render", tags=["render"])
 
 
 @app.on_event("startup")
