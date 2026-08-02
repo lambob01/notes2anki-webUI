@@ -7,6 +7,12 @@ import tempfile
 from pathlib import Path
 from typing import Optional
 
+# A PDF page carrying at least this many vector drawing ops is treated as
+# holding a figure rather than a rule or an underline. Diagrams exported from
+# slide decks arrive as vectors, not embedded images, so counting only raster
+# images would read a chart-only page as blank and discard it.
+MIN_VECTOR_DRAWINGS = 5
+
 
 class DocumentSlide:
     def __init__(
@@ -119,7 +125,9 @@ class DocumentReader:
 
         for i, page in enumerate(doc):
             text = page.get_text().strip()
-            if skip_title_blank and self._is_title_or_blank(text, i):
+            if skip_title_blank and self._is_title_or_blank(
+                text, i, has_visual=self._pdf_page_has_visual(page)
+            ):
                 continue
 
             pix = page.get_pixmap(dpi=dpi)
@@ -185,8 +193,8 @@ class DocumentReader:
         pdf_path = out_dir / f"{self.path.stem}.pdf"
         return pdf_path if pdf_path.exists() else None
 
-    def _pptx_slide_meta(self) -> list[tuple[str, str]]:
-        """(visible text, speaker notes) per slide, parallel to slide order."""
+    def _pptx_slide_meta(self) -> list[tuple[str, str, bool]]:
+        """(visible text, speaker notes, has figure) per slide, in slide order."""
         from pptx import Presentation
 
         meta = []
@@ -201,7 +209,7 @@ class DocumentReader:
             # has_notes_slide first: accessing .notes_slide *creates* one.
             if slide.has_notes_slide and slide.notes_slide.notes_text_frame:
                 notes = slide.notes_slide.notes_text_frame.text
-            meta.append((text, notes))
+            meta.append((text, notes, self._has_visual_content(slide)))
         return meta
 
     def _render_pptx(self, dpi: int, skip_title_blank: bool) -> list[DocumentSlide]:
@@ -221,8 +229,12 @@ class DocumentReader:
                 slides = []
                 doc = fitz.open(pdf_path)
                 for i, page in enumerate(doc):
-                    slide_text, notes = meta[i] if i < len(meta) else ("", "")
-                    if skip_title_blank and self._is_title_or_blank(slide_text.strip(), i):
+                    slide_text, notes, has_visual = (
+                        meta[i] if i < len(meta) else ("", "", False)
+                    )
+                    if skip_title_blank and self._is_title_or_blank(
+                        slide_text.strip(), i, has_visual=has_visual
+                    ):
                         continue
                     slides.append(
                         DocumentSlide(
@@ -245,8 +257,12 @@ class DocumentReader:
             slides = []
 
             for i, slide in enumerate(prs.slides):
-                slide_text, notes = meta[i] if i < len(meta) else ("", "")
-                if skip_title_blank and self._is_title_or_blank(slide_text.strip(), i):
+                slide_text, notes, has_visual = (
+                    meta[i] if i < len(meta) else ("", "", False)
+                )
+                if skip_title_blank and self._is_title_or_blank(
+                    slide_text.strip(), i, has_visual=has_visual
+                ):
                     continue
 
                 img_path = img_dir / f"slide_{i:04d}.png"
@@ -333,7 +349,68 @@ class DocumentReader:
             )
 
     @staticmethod
-    def _is_title_or_blank(text: str, slide_index: int) -> bool:
+    def _has_visual_content(slide) -> bool:
+        """True if a PPTX slide carries a picture, chart, table, or diagram.
+
+        A slide whose content *is* a figure has little or no extractable text,
+        so a text-only heuristic reads it as blank and drops it - discarding
+        exactly the material the vision model exists to read.
+
+        Pictures and charts sitting in a content placeholder report shape_type
+        PLACEHOLDER rather than PICTURE/CHART, so the has_* flags and `.image`
+        are checked too; shape_type alone misses them.
+        """
+        try:
+            from pptx.enum.shapes import MSO_SHAPE_TYPE
+        except ImportError:
+            return False
+
+        # getattr per name: an older python-pptx missing one member must not
+        # take out the whole check.
+        visual_types = {
+            getattr(MSO_SHAPE_TYPE, name, None)
+            for name in (
+                "PICTURE",
+                "LINKED_PICTURE",
+                "CHART",
+                "TABLE",
+                "GROUP",
+                "MEDIA",
+                "EMBEDDED_OLE_OBJECT",
+                "LINKED_OLE_OBJECT",
+                "DIAGRAM",
+                "IGX_GRAPHIC",
+                "INK",
+                "FREEFORM",
+            )
+        } - {None}
+
+        for shape in getattr(slide, "shapes", []):
+            if getattr(shape, "shape_type", None) in visual_types:
+                return True
+            if getattr(shape, "has_chart", False) or getattr(shape, "has_table", False):
+                return True
+            if hasattr(shape, "image"):
+                return True
+        return False
+
+    @staticmethod
+    def _pdf_page_has_visual(page) -> bool:
+        """True if a PDF page carries a raster image or enough vector art to
+        be a figure. Errs toward True - a page we cannot classify is kept."""
+        try:
+            if page.get_images():
+                return True
+            return len(page.get_drawings()) >= MIN_VECTOR_DRAWINGS
+        except Exception:
+            return True
+
+    @staticmethod
+    def _is_title_or_blank(text: str, slide_index: int, has_visual: bool = False) -> bool:
+        # A slide with a figure is content no matter how little text it has:
+        # the vision model reads the picture, not the text layer.
+        if has_visual:
+            return False
         if not text.strip():
             return True
         if slide_index <= 1 and len(text.strip()) < 40:
