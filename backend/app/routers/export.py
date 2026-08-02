@@ -17,15 +17,22 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import Generation, Card, CardTemplate
 from app.config import EXPORT_DIR, SLIDES_DIR
+from app.services.latex import clean_latex
 
 router = APIRouter()
 
 
-def _clean_latex(value: str) -> str:
-    import re
-    value = re.sub(r"\\\\", r"\\", (value or ""))
-    value = re.sub(r"\\\(|\\\)", r"", value)
-    return html.escape(value, quote=False)
+def _anki_field(value: str) -> str:
+    """Model text as an Anki field: HTML-escaped, LaTeX left intact.
+
+    This must stay identical to `escapeField` in the AnkiConnect client - the
+    two write paths produce the same cards from the same row, and any
+    divergence shows up as a deck that renders differently depending on how it
+    got there. Stripping the `\\(...\\)` delimiters here used to be that
+    divergence: it left `.apkg` imports with unrendered inline math while a
+    sync of the same cards rendered fine.
+    """
+    return html.escape(clean_latex(value), quote=False)
 
 
 def _stable_id(value: str) -> int:
@@ -221,7 +228,7 @@ def _build_apkg(gen: Generation, db: Session) -> str:
                         if img:
                             parts.append(img)
                     else:
-                        text = _clean_latex(fields.get(source, ""))
+                        text = _anki_field(fields.get(source, ""))
                         if text:
                             parts.append(text)
                 # Unmapped image: still attach the slide, on the back field.
@@ -241,7 +248,7 @@ def _build_apkg(gen: Generation, db: Session) -> str:
                     value = ""
                 note_fields.append(value)
         else:
-            note_fields = [_clean_latex(fields.get(fn, "")) for fn in anki_field_names]
+            note_fields = [_anki_field(fields.get(fn, "")) for fn in anki_field_names]
             media = _slide_media(gen, card)
             if media:
                 img_html, stored = media

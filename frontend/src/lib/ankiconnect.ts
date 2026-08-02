@@ -10,28 +10,75 @@
 const ANKI_CONNECT_URL = 'http://127.0.0.1:8765'
 const ANKI_CONNECT_VERSION = 6
 
+const MAX_ATTEMPTS = 5
+const RETRY_DELAY_MS = 1000
+const BUSY_RETRY_DELAY_MS = 1500
+
+// AnkiConnect reports "Anki's UI is mid-operation, ask again" by leaking the Qt
+// error rather than a status code. Syncing 60 notes while Anki is doing
+// anything else hits this routinely, and it clears on its own.
+const BUSY_MARKERS = ['QPushButton', 'deleted object']
+
+const UNREACHABLE_MESSAGE =
+  'Could not reach Anki. Make sure Anki is running with the AnkiConnect ' +
+  "add-on installed, and that this page's address is listed in " +
+  "AnkiConnect's webCorsOriginList setting."
+
 export class AnkiConnectError extends Error {}
 
-async function invoke<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
-  let res: Response
-  try {
-    res = await fetch(ANKI_CONNECT_URL, {
-      method: 'POST',
-      // No custom headers: adding any would trigger a CORS preflight that
-      // AnkiConnect does not answer.
-      body: JSON.stringify({ action, version: ANKI_CONNECT_VERSION, params }),
-    })
-  } catch {
-    throw new AnkiConnectError(
-      'Could not reach Anki. Make sure Anki is running with the AnkiConnect ' +
-        'add-on installed, and that this page\'s address is listed in ' +
-        'AnkiConnect\'s webCorsOriginList setting.'
-    )
-  }
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
-  const payload = await res.json()
-  if (payload.error) throw new AnkiConnectError(payload.error)
-  return payload.result as T
+async function invoke<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let res: Response
+    try {
+      res = await fetch(ANKI_CONNECT_URL, {
+        method: 'POST',
+        // No custom headers: adding any would trigger a CORS preflight that
+        // AnkiConnect does not answer.
+        body: JSON.stringify({ action, version: ANKI_CONNECT_VERSION, params }),
+      })
+    } catch {
+      // Anki genuinely unreachable, or a blip on the loopback socket. Retrying
+      // is safe for every action used here: addNotes runs with
+      // allowDuplicate:false so a re-send lands as duplicates rather than
+      // doubles, and the rest are idempotent.
+      if (attempt === MAX_ATTEMPTS) throw new AnkiConnectError(UNREACHABLE_MESSAGE)
+      await sleep(RETRY_DELAY_MS)
+      continue
+    }
+
+    const payload = await res.json()
+    const error = payload.error
+    if (error) {
+      const text = String(error)
+      if (BUSY_MARKERS.some((marker) => text.includes(marker)) && attempt < MAX_ATTEMPTS) {
+        await sleep(BUSY_RETRY_DELAY_MS)
+        continue
+      }
+      throw new AnkiConnectError(text)
+    }
+    return payload.result as T
+  }
+  // Unreachable: the final attempt always returns or throws. Here to satisfy
+  // the return type - the last busy error is what actually surfaces.
+  throw new AnkiConnectError('Anki stayed busy after several retries.')
+}
+
+/**
+ * Model text as an Anki field.
+ *
+ * Anki renders fields as HTML, so a `<` in model output silently swallows
+ * everything after it - and a hostile or confused model could inject markup
+ * into the collection. Escapes the same three characters as Python's
+ * `html.escape(quote=False)`, which is what the .apkg export path uses, so
+ * both routes write identical cards. LaTeX delimiters are untouched.
+ */
+function escapeField(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
 }
 
 export const anki = {
@@ -228,7 +275,8 @@ export async function syncToAnki(opts: {
             const img = slideImageHtml(card, generationId, mediaFiles)
             if (img) parts.push(img)
           } else {
-            const text = String(card.fields?.[source] ?? '')
+            // Escaped, unlike the <img> above, which is markup we author.
+            const text = escapeField(card.fields?.[source])
             if (text) parts.push(text)
           }
         }
@@ -246,7 +294,7 @@ export async function syncToAnki(opts: {
     } else {
       for (const name of fieldNames) {
         // Anki requires every field present, even when empty.
-        fields[name] = String(card.fields?.[name] ?? '')
+        fields[name] = escapeField(card.fields?.[name])
       }
       const filename =
         card.slide_index != null
