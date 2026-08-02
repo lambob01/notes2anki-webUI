@@ -42,6 +42,8 @@ def create_template(data: CardTemplateCreate, db: Session = Depends(get_db)):
         fields=data.fields,
         css=data.css or DEFAULT_CSS,
         is_default=data.is_default,
+        mapping=data.mapping,
+        anki_fields=data.anki_fields,
     )
     if data.is_default:
         db.query(CardTemplate).filter(CardTemplate.is_default == True).update(

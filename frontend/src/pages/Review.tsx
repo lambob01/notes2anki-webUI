@@ -92,12 +92,15 @@ export default function ReviewPage() {
             generationId={gen.id}
             cards={gen.cards}
             deckName={gen.deck_name || 'Default'}
-            // Anki keys note types by name, so reuse the template's name to
-            // land in the same note type across runs instead of duplicating.
-            modelName={template?.name || 'Notes2Anki'}
+            // Anki keys note types by name. A mapped template targets the
+            // user's own Anki note type; legacy templates reuse the template
+            // name to land in the same note type across runs.
+            modelName={template?.mapping ? template.note_type : template?.name || 'Notes2Anki'}
             fieldNames={(template?.fields || []).map((f: any) => f.name)}
             css={template?.css}
             isCloze={(template?.note_type || '').toLowerCase() === 'cloze'}
+            mapping={template?.mapping}
+            ankiFields={template?.anki_fields}
           />
           <CardReviewGrid cards={gen.cards} />
         </>

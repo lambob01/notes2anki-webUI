@@ -57,6 +57,75 @@ def _slide_media(gen: Generation, card: Card):
     return img_html, stored
 
 
+def _slide_image_html(gen: Generation, card: Card, media_files: list[str]) -> str:
+    """The `<img>` HTML for a card's slide, registering its media file.
+
+    Used by mapped exports, where the image lands in whichever Anki field the
+    mapping points it at rather than being prepended to the front.
+    """
+    media = _slide_media(gen, card)
+    if not media:
+        return ""
+    img_html, stored = media
+    if stored not in media_files:
+        media_files.append(stored)
+    return img_html
+
+
+# Canonical content order within a field when several sources share it; the
+# slide image always comes first so it tops the card.
+_SOURCE_ORDER = ("prompt", "answer", "formula", "example question", "solution", "topic", "extra")
+
+
+def _normalize_mapping(mapping: dict) -> dict[str, list[str]]:
+    """Canonical form: {anki field: [source, ...]}.
+
+    Also accepts the older single-source shape {source: field}, so templates
+    saved before multi-source mapping still export correctly.
+    """
+    normalized: dict[str, list[str]] = {}
+    for key, value in (mapping or {}).items():
+        if isinstance(value, list):
+            sources = [s for s in value if s]
+            if sources:
+                normalized[key] = sources
+        elif value:
+            normalized[value] = [key]
+    return normalized
+
+
+def _ordered_sources(sources: list[str]) -> list[str]:
+    """Sources in display order: the slide image first, then canonical order."""
+    non_image = [s for s in sources if s != "image"]
+    non_image.sort(key=lambda s: _SOURCE_ORDER.index(s) if s in _SOURCE_ORDER else 99)
+    return (["image"] if "image" in sources else []) + non_image
+
+
+def _front_field(mapping: dict[str, list[str]], anki_field_names: list[str]) -> str:
+    for field, sources in mapping.items():
+        if "prompt" in sources:
+            return field
+    return anki_field_names[0] if anki_field_names else "prompt"
+
+
+def _image_field(mapping: dict[str, list[str]], front: str) -> str | None:
+    """Where the slide image lands: a field mapped to image, else the back.
+
+    Back = any mapped field that isn't the front, preferring "answer" - so a
+    note type with no image field still gets the slide picture attached.
+    """
+    for field, sources in mapping.items():
+        if "image" in sources:
+            return field
+    for field, sources in mapping.items():
+        if "answer" in sources and field != front:
+            return field
+    for field, sources in mapping.items():
+        if field != front and sources:
+            return field
+    return front  # last resort: the front is all there is
+
+
 def _build_apkg(gen: Generation, db: Session) -> str:
     cards = db.query(Card).filter(
         Card.generation_id == gen.id,
@@ -68,8 +137,7 @@ def _build_apkg(gen: Generation, db: Session) -> str:
 
     template = db.query(CardTemplate).filter(CardTemplate.id == gen.template_id).first()
     css = template.css if template else ""
-    fields_list = template.fields if template else []
-    field_names = [f["name"] for f in fields_list] if fields_list else ["prompt", "answer"]
+    mapping = dict(template.mapping or {}) if template else {}
 
     # Anki merges on model/deck id, so these must be stable across restarts.
     # Python's hash() is salted per process (PYTHONHASHSEED), which would mint
@@ -79,26 +147,56 @@ def _build_apkg(gen: Generation, db: Session) -> str:
 
     # note_type lives on the template, not the generation.
     template_note_type = (template.note_type if template else "") or "Basic"
+    is_cloze = template_note_type.lower() == "cloze"
+    note_type = genanki.Model.CLOZE if is_cloze else genanki.Model.FRONT_BACK
 
-    if template_note_type.lower() == "cloze":
-        front_template = "{{cloze:prompt}}"
-        back_template = "{{cloze:prompt}}<hr id=answer>{{answer}}"
-        note_type = genanki.Model.CLOZE
+    if mapping:
+        # A template built from an existing Anki note type: fields = the
+        # detected Anki fields (unmapped ones stay empty), values composed
+        # from each field's mapped sources.
+        norm = _normalize_mapping(mapping)
+        anki_field_names = [f for f in (template.anki_fields or []) if f]
+        if not anki_field_names:
+            anki_field_names = list(norm.keys())
+        front_field = _front_field(norm, anki_field_names)
+        image_field = _image_field(norm, front_field)
+        if is_cloze:
+            back_field = next(
+                (f for f in anki_field_names if f != front_field), front_field
+            )
+            front_template = f"{{{{cloze:{front_field}}}}}"
+            back_template = (
+                f"{{{{cloze:{front_field}}}}}<hr id=answer>{{{{{back_field}}}}}"
+            )
+        else:
+            front_template = f"{{{{{front_field}}}}}"
+            back_parts = ["{{FrontSide}}", "<hr id=answer>"]
+            for fn in anki_field_names:
+                if fn != front_field:
+                    back_parts.append(f"{{{{{fn}}}}}")
+            back_template = "<br>".join(back_parts)
     else:
-        front = "{{prompt}}"
-        back_parts = ["{{FrontSide}}", "<hr id=answer>"]
-        for fn in field_names:
-            if fn not in ("prompt",):
-                back_parts.append(f"{{{{{fn}}}}}")
-        back = "<br>".join(back_parts)
-        front_template = front
-        back_template = back
-        note_type = genanki.Model.FRONT_BACK
+        # Legacy template: fields are the LLM output fields, image goes on
+        # the front as before.
+        fields_list = template.fields if template else []
+        anki_field_names = [f["name"] for f in fields_list] if fields_list else ["prompt", "answer"]
+        front_field = "prompt" if "prompt" in anki_field_names else (anki_field_names[0] if anki_field_names else "prompt")
+        image_field = None
+        if is_cloze:
+            front_template = "{{cloze:prompt}}"
+            back_template = "{{cloze:prompt}}<hr id=answer>{{answer}}"
+        else:
+            front_template = "{{prompt}}"
+            back_parts = ["{{FrontSide}}", "<hr id=answer>"]
+            for fn in anki_field_names:
+                if fn not in ("prompt",):
+                    back_parts.append(f"{{{{{fn}}}}}")
+            back_template = "<br>".join(back_parts)
 
     anki_model = genanki.Model(
         model_id,
         gen.template_id,
-        fields=[{"name": fn} for fn in field_names],
+        fields=[{"name": fn} for fn in anki_field_names],
         templates=[{
             "name": "Card 1",
             "qfmt": front_template,
@@ -110,20 +208,49 @@ def _build_apkg(gen: Generation, db: Session) -> str:
 
     deck = genanki.Deck(deck_id, gen.deck_name or "Default")
 
-    # The image belongs on the front. Templates name it "prompt" by default;
-    # fall back to the first field for note types that call it something else.
-    front_index = next((i for i, fn in enumerate(field_names) if fn.lower() == "prompt"), 0)
-
     media_files = []
     for card in cards:
         fields = card.fields or {}
-        note_fields = [_clean_latex(fields.get(fn, "")) for fn in field_names]
-        media = _slide_media(gen, card)
-        if media:
-            img_html, stored = media
-            note_fields[front_index] = f"{img_html}{note_fields[front_index]}"
-            if stored not in media_files:
-                media_files.append(stored)
+        note_fields = []
+        if mapping:
+            for fn in anki_field_names:
+                parts = []
+                for source in _ordered_sources(norm.get(fn, [])):
+                    if source == "image":
+                        img = _slide_image_html(gen, card, media_files)
+                        if img:
+                            parts.append(img)
+                    else:
+                        text = _clean_latex(fields.get(source, ""))
+                        if text:
+                            parts.append(text)
+                # Unmapped image: still attach the slide, on the back field.
+                if (
+                    image_field
+                    and fn == image_field
+                    and "image" not in norm.get(fn, [])
+                ):
+                    img = _slide_image_html(gen, card, media_files)
+                    if img:
+                        parts.insert(0, img)
+                if len(parts) > 1:
+                    value = "<br>".join(parts)
+                elif parts:
+                    value = parts[0]
+                else:
+                    value = ""
+                note_fields.append(value)
+        else:
+            note_fields = [_clean_latex(fields.get(fn, "")) for fn in anki_field_names]
+            media = _slide_media(gen, card)
+            if media:
+                img_html, stored = media
+                front_index = next(
+                    (i for i, fn in enumerate(anki_field_names) if fn == front_field), 0
+                )
+                note_fields[front_index] = f"{img_html}{note_fields[front_index]}"
+                if stored not in media_files:
+                    media_files.append(stored)
         note = genanki.Note(
             model=anki_model,
             fields=note_fields,

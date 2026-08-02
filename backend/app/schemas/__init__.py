@@ -68,6 +68,8 @@ class CardTemplateSchema(BaseModel):
     fields: list[dict]
     css: Optional[str] = None
     is_default: bool = False
+    mapping: Optional[dict] = None
+    anki_fields: Optional[list[str]] = None
     created_at: datetime.datetime
     updated_at: datetime.datetime
 
@@ -80,6 +82,8 @@ class CardTemplateCreate(BaseModel):
     fields: list[dict]
     css: Optional[str] = None
     is_default: bool = False
+    mapping: Optional[dict] = None
+    anki_fields: Optional[list[str]] = None
 
 
 class CardTemplateUpdate(BaseModel):
@@ -88,6 +92,8 @@ class CardTemplateUpdate(BaseModel):
     fields: Optional[list[dict]] = None
     css: Optional[str] = None
     is_default: Optional[bool] = None
+    mapping: Optional[dict] = None
+    anki_fields: Optional[list[str]] = None
 
 
 class TextNoteCreate(BaseModel):

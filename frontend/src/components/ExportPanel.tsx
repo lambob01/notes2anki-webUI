@@ -12,6 +12,8 @@ interface Props {
   fieldNames: string[]
   css?: string
   isCloze?: boolean
+  mapping?: Record<string, string>
+  ankiFields?: string[]
 }
 
 export function ExportPanel({
@@ -22,6 +24,8 @@ export function ExportPanel({
   fieldNames,
   css,
   isCloze,
+  mapping,
+  ankiFields,
 }: Props) {
   const [syncing, setSyncing] = useState(false)
   const [lastResult, setLastResult] = useState<string | null>(null)
@@ -42,6 +46,8 @@ export function ExportPanel({
         fieldNames,
         css,
         isCloze,
+        mapping,
+        ankiFields,
       })
       const dupNote =
         result.duplicates > 0 ? ` (${result.duplicates} already in your collection)` : ''

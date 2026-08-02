@@ -70,6 +70,15 @@ class CardTemplate(Base):
     fields = Column(JSON, nullable=False)
     css = Column(Text, nullable=True)
     is_default = Column(Boolean, default=False)
+    # For templates built from an existing Anki note type: which app source
+    # (prompt/answer/formula/example question/solution/topic/extra/image)
+    # lands in each Anki field. None = legacy template, exports use `fields`
+    # verbatim and attach the slide image to the front.
+    mapping = Column(JSON, nullable=True)
+    # The note type's full field list (Anki order) as detected via
+    # AnkiConnect, so .apkg exports build a model matching the user's Anki
+    # and re-imports merge instead of dropping fields.
+    anki_fields = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
