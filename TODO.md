@@ -39,13 +39,20 @@ Mark an item `[x]` only once it has been verified, not just written.
   exactly this concurrency. That attribution is now unconfirmed — re-test
   whether the `pysqlite3` dependency is still needed. (Noted in `CLAUDE.md`.)
 
-- [ ] **2. `APP_PASSWORD` is advertised but does not exist.**
-  Wired in `docker-compose.yml:24`, documented in `.env.example:6` as "require
-  a password to reach the UI". No backend code reads it — setting it gives a
-  false sense of security on a service holding decryptable API keys.
-  `JOB_RETENTION_DAYS` is the same (see 5). *Fix:* implement the
-  `itsdangerous`-signed cookie gate per `PLAN.md:82`, or strip both from
-  compose and `.env.example` until it exists.
+- [x] **2. `APP_PASSWORD` is advertised but does not exist.** Wired in
+  `docker-compose.yml`, documented in `.env.example` as "require a password to
+  reach the UI"; no backend code ever read it, so setting it protected nothing.
+
+  *Resolved by decision, not by implementing it.* No login gate is wanted, so
+  the setting is gone from both files rather than left as a false promise, and
+  `.env.example` now says so explicitly to stop it being re-added. The exposure
+  it pretended to cover is closed instead by binding compose to
+  `127.0.0.1:8080:8080`, with the reasoning in the compose comment and a
+  Security section in the README.
+
+  Note this changes deployment: a reverse proxy must now run on the same host
+  and target `127.0.0.1:8080`. Widening the bind puts an unauthenticated app
+  holding live API keys back on the network.
 
 ## High
 
@@ -72,10 +79,20 @@ Mark an item `[x]` only once it has been verified, not just written.
   durable DB reference to a file in volatile storage, so re-running an older
   job fails with `File not found` for no visible reason.
 
-- [ ] **7. SSRF surface.** `POST /api/providers/test` (`providers.py:133`)
+- [~] **7. SSRF surface.** `POST /api/providers/test` (`providers.py:133`)
   takes an arbitrary `base_url` and reports the outcome; `fetch_models`
-  returns body content. With no auth in front (see 2), a LAN peer can probe
-  internal hosts through the server.
+  returns body content, so the server is a probe for anything it can route to.
+
+  *Mitigated, not fixed.* The loopback bind from item 2 means it is no longer
+  reachable off-host, which is the whole of the practical risk. Deliberately
+  **not** patched with a private-IP blocklist: the `ollama` and `lmstudio`
+  presets legitimately point at `http://localhost:11434` and `:1234`, so a
+  blocklist that stopped the SSRF would also break local-runtime support. A
+  user-supplied base URL is inherently this shape.
+
+  It goes away for real in the client-side move — once the browser makes the
+  LLM calls, "localhost" means *the user's own machine*, which is both correct
+  and harmless. Don't spend effort patching it server-side first.
 
 ## Medium
 

@@ -19,6 +19,12 @@ docker compose up --build
 
 Then open http://localhost:8080. For the PPTX vision path, build with `WITH_LIBREOFFICE=false` to drop the ~600MB LibreOffice dependency (text-only fallback for PPTX).
 
+### Security
+
+**This app has no authentication, so compose binds it to `127.0.0.1` only.** Anyone who can reach port 8080 can spend your provider API credits, read every deck you've generated, and use `POST /api/providers/test` to make the host issue arbitrary HTTP requests to anything it can route to. Don't widen that bind, port-forward it, or put it behind a reverse proxy unless something in front is authenticating requests.
+
+Reaching it from another device safely means a private network (Tailscale/WireGuard) or auth at the proxy (mTLS, an authenticating proxy) — not exposing it directly.
+
 ## Dev
 
 - Backend (from `backend/`): `uvicorn app.main:app --port 8080`

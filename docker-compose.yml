@@ -7,7 +7,17 @@ services:
         WITH_LIBREOFFICE: "true"
     image: notes2anki-webui
     ports:
-      - "8080:8080"
+      # Loopback only. This app has NO authentication of any kind: anyone who
+      # can reach port 8080 can spend your provider API keys, read every deck,
+      # and use POST /api/providers/test to make this machine issue arbitrary
+      # HTTP requests. Publishing it as "8080:8080" binds 0.0.0.0 and hands all
+      # of that to every device on the network - and, behind a port-forward or
+      # a reverse proxy, to the internet.
+      #
+      # If a reverse proxy needs to reach this, run the proxy on this host and
+      # point it at 127.0.0.1:8080. Only widen this bind if something in front
+      # of it is doing authentication.
+      - "127.0.0.1:8080:8080"
     volumes:
       # SQLite database, uploads, rendered slides and exports all live here.
       - ./data:/data
@@ -15,8 +25,5 @@ services:
       # Encrypts stored provider API keys. Generate one with:
       #   python -c "import secrets; print(secrets.token_urlsafe(32))"
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env - see .env.example}
-      # Optional: set to gate the whole UI behind a password. Unset = no login,
-      # which is the intended default for a trusted LAN.
-      APP_PASSWORD: ${APP_PASSWORD:-}
       JOB_RETENTION_DAYS: ${JOB_RETENTION_DAYS:-7}
     restart: unless-stopped

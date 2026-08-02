@@ -2,7 +2,9 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-`AGENTS.md` covers the same ground for other agent tools — keep the two in sync when conventions change. `PLAN.md` is the canonical design doc and migration status (it tracks what's still open: SSE progress, `APP_PASSWORD`); read it before non-trivial backend work.
+`AGENTS.md` covers the same ground for other agent tools — keep the two in sync when conventions change. `PLAN.md` is the canonical design doc and migration status; read it before non-trivial backend work. `TODO.md` is the ranked defect backlog.
+
+**The app has no authentication and compose binds it to `127.0.0.1` only.** Don't widen that, and don't add an `APP_PASSWORD`-style gate — it was considered and dropped. The direction of travel is to move LLM calls and all stored state into the browser, leaving the server as a stateless document-render endpoint; see "Client-side direction" in `PLAN.md` before adding anything to the backend.
 
 ## Commands
 

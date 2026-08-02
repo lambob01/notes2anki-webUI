@@ -27,7 +27,7 @@ Verified by booting the backend and hitting it directly:
 | 5 | ~~Two containers, wrong ports~~ | **DONE** - single container on 8080, FastAPI serves the Vite SPA |
 | 6 | ~~PPTX vision path broken in Docker~~ | **DONE** - `libreoffice-impress` added behind `WITH_LIBREOFFICE` build arg |
 | 7 | **No AnkiConnect integration** | Module D spec item, entirely absent |
-| 8 | ~~No auth, `allow_origins=["*"]`~~ | **PARTIAL** - CORS now opt-in via `CORS_ORIGINS`; `APP_PASSWORD` gate still to build |
+| 8 | ~~No auth, `allow_origins=["*"]`~~ | **WON'T FIX** - CORS is opt-in via `CORS_ORIGINS`; the `APP_PASSWORD` gate was dropped, and the app is bound to loopback instead (see step 3) |
 | 9 | **No progress feedback** | Generation runs as a background task with no SSE/polling channel; the UI can't show per-slide progress |
 | 10 | ~~Vision path crashed for every provider~~ | **FIXED** - `CARD_COUNT_HINT.format(target_card_count=…)` raised `KeyError: 'target_count'` before any LLM call |
 | 11 | ~~`.apkg` export returned HTTP 500~~ | **FIXED** - `gen.note_type` doesn't exist (it's on `CardTemplate`); `genanki.NOTE_TYPE_BASIC` isn't a real constant |
@@ -76,10 +76,12 @@ Create `app/llm/{base,openai_compat,anthropic,presets}.py` implementing `LLMClie
 **2. Field-driven prompts + JSON schema** *(fixes gaps 2 and 3)*
 Add `description` to the template field schema. Build the system prompt and a JSON Schema (`required`, `additionalProperties: false`) from `template_fields`. Implement tier probing, storing the winner on `Provider.json_mode_tier`. Seed **Basic** (Front/Back), **Cloze** (`model_type=genanki.Model.CLOZE`), and keep the existing 7-field template as **Lecture** so current collections stay compatible.
 
-**3. Encrypt keys, scope CORS, optional password** — ✅ **DONE** (except `APP_PASSWORD`)
+**3. Encrypt keys, scope CORS, optional password** — ✅ **DONE** (`APP_PASSWORD` dropped, see below)
 `app/crypto.py` derives a Fernet key from `SECRET_KEY` (auto-generated into `DATA_DIR/.secret_key` for local dev, required by compose). `Provider.api_key` is now a Python property over an encrypted `api_key_enc` column, so every existing call site kept working unchanged; the old plaintext column is mapped aside as `legacy_api_key` purely so a startup migration can encrypt existing rows and blank it. `ProviderSchema` exposes only `key_set` + `key_hint` — never the key. An undecryptable key (changed `SECRET_KEY`) degrades to `None` with a red "re-enter it" state in the UI rather than crashing. Because the browser can no longer echo the key back, connection testing for a *saved* provider moved to `POST /api/providers/{id}/test`, and an empty `api_key` on update is ignored so it can't silently wipe a working credential.
 
-Still to do: optional `APP_PASSWORD` behind an `itsdangerous`-signed HttpOnly cookie.
+`APP_PASSWORD` will not be built. It was listed in `docker-compose.yml` and `.env.example` as though it gated the UI, but nothing ever read it, so setting it protected nothing — worse than having no such setting at all. A login gate isn't wanted, so both references are removed and compose now binds `127.0.0.1:8080:8080`: the app has no authentication and must not be reachable off-host. A reverse proxy has to run on the same host and target loopback.
+
+Longer term this stops mattering, because the LLM calls and all stored state move into the browser — see "Client-side direction" below.
 
 **4. Next.js → Vite React SPA, one container** — ✅ **DONE**
 Ported to Vite + React + Tailwind + react-router. The Next coupling was only 6 imports across 4 files (`next/link`, `useRouter`, `usePathname`, `useParams`) plus 9 `'use client'` directives; every component came over unchanged. `lib/api.ts` already used relative URLs, so it needed only the dead SSR branch removed. FastAPI now serves the built SPA from `STATIC_DIR` with a history fallback so deep links survive a refresh, and `/api/*` still returns JSON 404s rather than the HTML shell. Single multi-stage Dockerfile (`node:22-alpine` → `python:3.12-slim`), non-root uid 1000, healthcheck, and `libreoffice-impress` behind `WITH_LIBREOFFICE` (~600MB on a ~250MB base). Compose collapsed to one service on 8080.
@@ -111,3 +113,66 @@ Ported to Vite + React + Tailwind + react-router. The Next coupling was only 6 i
 - **AnkiConnect** — with Anki open and the origin allowlisted, drive the browser: load Review, select a subset, Sync, confirm via console that `addNotes` returned note IDs, then verify the notes exist in Anki's browser.
 - **Secrets** — confirm no endpoint returns a plaintext key and that `sqlite3 … "select api_key_enc from providers"` shows ciphertext.
 - **Docker** — `docker compose up --build`, one end-to-end job at `http://localhost:8080`, then `down && up` and confirm providers, templates, and model history survived.
+
+## Client-side direction
+
+The server-side architecture above works, but it has a structural problem: it is
+a networked service holding usable LLM API keys with **no authentication**, and
+the only safe deployment is therefore loopback-only. That rules out the thing it
+is actually wanted for — opening it from a phone or a second machine — without
+dragging in a VPN or a login, both of which were considered and rejected.
+
+The fix is to move the state and the LLM calls into the browser, leaving the
+server as the one thing a browser genuinely cannot do.
+
+**Target shape**
+
+| | today | target |
+|---|---|---|
+| Provider API keys | server, Fernet-encrypted | browser storage only |
+| Generations, cards | server SQLite | IndexedDB |
+| Uploaded files, slide images | `/data/*`, kept | browser; server deletes after converting |
+| Who calls the LLM | server | browser |
+| Server endpoints | 6 routers | `POST /render` |
+
+`POST /render` takes a `.pptx`/`.pdf`, returns one JPEG per slide, keeps
+nothing. `document_reader.py` moves behind it essentially unchanged — the
+LibreOffice → PDF → PyMuPDF path, the title/blank heuristics, `has_visual`, all
+of it. That file is the hardest part of this codebase and it does not get
+rewritten.
+
+Everything else moves to TypeScript: the two LLM adapters (~280 lines, thin),
+prompt assembly, the `_extract_cards_json` salvage parser, `latex.py`
+normalization, and `.apkg` generation (sql.js + JSZip — an `.apkg` is a zip
+around a SQLite `collection.anki2`). The React UI, the AnkiConnect client, and
+KaTeX rendering are already browser code and carry over.
+
+**What this buys.** A stranger who finds the URL can convert a PowerPoint.
+That's the whole attack: no keys to spend, no decks to read, no outbound
+requests to abuse (which retires item 7 in `TODO.md`). The app can then be
+served from anywhere — static host, GitHub Pages — and opened from any device
+with no login and no VPN.
+
+**Accepted tradeoffs**
+
+- **Decks are per-browser.** Generate on the laptop, they are not on the phone.
+  Confirmed as acceptable; do not add a sync server to "fix" it without
+  revisiting the whole decision, because that reintroduces exactly the
+  authentication problem this removes.
+- **The render endpoint is unauthenticated compute.** It holds nothing, so the
+  exposure is CPU, not data. Run it with a file-size cap, a request timeout, no
+  network egress, and container resource limits: it feeds untrusted input to
+  LibreOffice, which has a CVE history.
+
+**De-risk before building.** Two unknowns can each invalidate the design, and
+both are hours to test, not weeks:
+
+1. **Which providers answer a browser `fetch`.** Anthropic supports it behind an
+   explicit `anthropic-dangerous-direct-browser-access: true` header; OpenRouter
+   supports it and proxies to everything else. Direct OpenAI and Gemini are
+   genuinely unclear — published sources contradict each other. Test with a
+   deliberately invalid key: an HTTP 401 coming back means CORS allowed the
+   call, a thrown `TypeError` means it was blocked. OpenRouter alone is enough
+   to make the design viable, so this decides provider support, not feasibility.
+2. **Whether sql.js can build an `.apkg` real Anki imports.** Use the export
+   round-trip check in Verification above, then import into Anki for real.

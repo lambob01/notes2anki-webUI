@@ -2,7 +2,7 @@
 
 ## What this is
 
-`notes2anki-webui` turns lecture PPTX/PDF/TXT into Anki cards via a vision LLM. FastAPI backend + Vite/React SPA shipped as **one container on port 8080**: FastAPI serves the API under `/api` and the built SPA from `backend/static`. No CORS in prod (same-origin). `PLAN.md` is the canonical design doc + migration status — read it before touching backend code; it tracks what's still open (SSE progress, `APP_PASSWORD`).
+`notes2anki-webui` turns lecture PPTX/PDF/TXT into Anki cards via a vision LLM. FastAPI backend + Vite/React SPA shipped as **one container on port 8080**: FastAPI serves the API under `/api` and the built SPA from `backend/static`. No CORS in prod (same-origin). `PLAN.md` is the canonical design doc + migration status — read it before touching backend code. `TODO.md` is the ranked defect backlog. The app has **no authentication** and compose binds it to `127.0.0.1` only; an `APP_PASSWORD` gate was considered and dropped, so don't add one. The direction of travel is a client-side app talking to a stateless render endpoint — see "Client-side direction" in `PLAN.md`.
 
 ## Commands
 
