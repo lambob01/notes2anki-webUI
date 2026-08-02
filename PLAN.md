@@ -167,12 +167,42 @@ with no login and no VPN.
 **De-risk before building.** Two unknowns can each invalidate the design, and
 both are hours to test, not weeks:
 
-1. **Which providers answer a browser `fetch`.** Anthropic supports it behind an
-   explicit `anthropic-dangerous-direct-browser-access: true` header; OpenRouter
-   supports it and proxies to everything else. Direct OpenAI and Gemini are
-   genuinely unclear — published sources contradict each other. Test with a
-   deliberately invalid key: an HTTP 401 coming back means CORS allowed the
-   call, a thrown `TypeError` means it was blocked. OpenRouter alone is enough
-   to make the design viable, so this decides provider support, not feasibility.
+1. ~~**Which providers answer a browser `fetch`.**~~ **ANSWERED** — measured, see
+   below.
 2. **Whether sql.js can build an `.apkg` real Anki imports.** Use the export
    round-trip check in Verification above, then import into Anki for real.
+   Still open.
+
+### Measured: provider CORS from the browser
+
+Probed from a real Chrome tab on an `http://127.0.0.1` origin, each request
+carrying a deliberately invalid key. An HTTP status returning means the browser
+allowed the cross-origin read; `TypeError: Failed to fetch` means it blocked.
+
+| Provider | `POST /chat/completions` | `GET /models` |
+|---|---|---|
+| **VectorEngine** (`api.vectorengine.cn`) | **allowed** (401) | **allowed** (401) |
+| Anthropic *with* `anthropic-dangerous-direct-browser-access: true` | **allowed** (401) | — |
+| Anthropic *without* that header | blocked | — |
+| Gemini (OpenAI-compat surface) | **allowed** (400) | — |
+| OpenRouter | **allowed** (401) | allowed (200) |
+| DeepSeek | **allowed** (401) | — |
+| OpenAI | **blocked** | allowed (401) |
+| Groq | **blocked** | — |
+
+Three things here matter more than the raw table:
+
+- **The provider actually in use is VectorEngine**, a `new-api` gateway that
+  fronts the gpt-4o / gemini / claude models this project's history shows being
+  used. It allows browser calls, so the client-side design works with the
+  existing setup unchanged — no need to route through OpenRouter.
+- **OpenAI is asymmetric**: `GET /models` is allowed but `POST /chat/completions`
+  is blocked. A naive port would show "connection test passed" (the test calls
+  `list_models`) and then fail on every single generation. Any browser-side
+  provider test must probe the *completion* endpoint, not `/models`.
+- **Anthropic's opt-in header is load-bearing**, confirmed by the controlled
+  pair above. Omit it and the call is blocked.
+
+Published sources contradict each other on OpenAI and Gemini; both were wrong in
+one direction or the other. Re-measure rather than trusting docs — the probe is
+a single static HTML page and takes two minutes.

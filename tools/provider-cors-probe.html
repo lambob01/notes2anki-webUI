@@ -1,0 +1,130 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Provider CORS probe</title>
+<style>
+  body { font: 14px/1.5 system-ui, sans-serif; padding: 20px; max-width: 900px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 12px; }
+  th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f3f3f3; }
+  .ok { color: #0a7d28; font-weight: 600; }
+  .no { color: #b00020; font-weight: 600; }
+  code { font-size: 12px; }
+</style>
+<h1>Provider CORS probe</h1>
+<p>Each request uses a deliberately invalid API key. An HTTP status coming back
+means the browser <em>allowed</em> the cross-origin call (CORS OK). A thrown
+<code>TypeError</code> means the browser blocked it.</p>
+<table id="out">
+  <tr><th>Provider</th><th>Call</th><th>Result</th><th>Detail</th></tr>
+</table>
+<p id="done"></p>
+
+<script>
+const FAKE = 'sk-invalid-key-for-cors-probe-0000000000';
+
+const targets = [
+  {
+    name: 'VectorEngine (your provider)', call: 'POST /chat/completions',
+    url: 'https://api.vectorengine.cn/v1/chat/completions',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${FAKE}` },
+    body: { model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+  },
+  {
+    name: 'VectorEngine (your provider)', call: 'GET /models',
+    url: 'https://api.vectorengine.cn/v1/models', method: 'GET',
+    headers: { 'authorization': `Bearer ${FAKE}` },
+  },
+  {
+    name: 'OpenAI', call: 'POST /chat/completions',
+    url: 'https://api.openai.com/v1/chat/completions',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${FAKE}` },
+    body: { model: 'gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+  },
+  {
+    name: 'OpenAI', call: 'GET /models',
+    url: 'https://api.openai.com/v1/models', method: 'GET',
+    headers: { 'authorization': `Bearer ${FAKE}` },
+  },
+  {
+    name: 'Anthropic', call: 'POST /v1/messages (+browser hdr)',
+    url: 'https://api.anthropic.com/v1/messages',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': FAKE,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: { model: 'claude-sonnet-5', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] },
+  },
+  {
+    name: 'Anthropic', call: 'POST /v1/messages (no browser hdr)',
+    url: 'https://api.anthropic.com/v1/messages',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': FAKE,
+      'anthropic-version': '2023-06-01',
+    },
+    body: { model: 'claude-sonnet-5', max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] },
+  },
+  {
+    name: 'Gemini (OpenAI-compat)', call: 'POST /chat/completions',
+    url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${FAKE}` },
+    body: { model: 'gemini-2.0-flash', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+  },
+  {
+    name: 'OpenRouter', call: 'POST /chat/completions',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${FAKE}` },
+    body: { model: 'openai/gpt-4o-mini', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+  },
+  {
+    name: 'OpenRouter', call: 'GET /models',
+    url: 'https://openrouter.ai/api/v1/models', method: 'GET', headers: {},
+  },
+  {
+    name: 'Groq', call: 'POST /chat/completions',
+    url: 'https://api.groq.com/openai/v1/chat/completions',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${FAKE}` },
+    body: { model: 'llama-3.1-8b-instant', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+  },
+  {
+    name: 'DeepSeek', call: 'POST /chat/completions',
+    url: 'https://api.deepseek.com/v1/chat/completions',
+    headers: { 'content-type': 'application/json', 'authorization': `Bearer ${FAKE}` },
+    body: { model: 'deepseek-chat', messages: [{ role: 'user', content: 'hi' }], max_tokens: 1 },
+  },
+];
+
+const results = [];
+
+function row(name, call, ok, detail) {
+  const tr = document.createElement('tr');
+  tr.innerHTML =
+    `<td>${name}</td><td><code>${call}</code></td>` +
+    `<td class="${ok ? 'ok' : 'no'}">${ok ? 'CORS OK' : 'BLOCKED'}</td>` +
+    `<td><code>${detail}</code></td>`;
+  document.getElementById('out').appendChild(tr);
+  results.push({ name, call, cors: ok, detail });
+  console.log(`[PROBE] ${ok ? 'CORS-OK ' : 'BLOCKED '} | ${name} | ${call} | ${detail}`);
+}
+
+(async () => {
+  for (const t of targets) {
+    try {
+      const res = await fetch(t.url, {
+        method: t.method || 'POST',
+        headers: t.headers,
+        body: t.body ? JSON.stringify(t.body) : undefined,
+      });
+      let snippet = '';
+      try { snippet = (await res.text()).slice(0, 120).replace(/\s+/g, ' '); } catch {}
+      row(t.name, t.call, true, `HTTP ${res.status} — ${snippet}`);
+    } catch (e) {
+      row(t.name, t.call, false, `${e.name}: ${e.message}`);
+    }
+  }
+  document.getElementById('done').textContent = 'PROBE COMPLETE';
+  console.log('[PROBE] COMPLETE ' + JSON.stringify(results));
+})();
+</script>
