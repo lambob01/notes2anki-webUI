@@ -1,0 +1,4 @@
+# Test-only dependencies. The runtime image installs requirements.txt alone,
+# so pytest never ships in the container.
+-r requirements.txt
+pytest>=8.0
