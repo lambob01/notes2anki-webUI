@@ -15,7 +15,7 @@ from app.models import Provider, ProviderModel, CardTemplate, Generation, Card, 
 from app.schemas import GenerateRequest, GenerationSchema
 from app.config import UPLOAD_DIR, HISTORY_DIR, SLIDES_DIR
 from app.services.document_reader import DocumentReader, DocumentSlide
-from app.llm.base import FatalProviderError
+from app.llm.base import FatalProviderError, ProviderConfig
 from app.services.ai_generator import (
     generate_cards_text,
     generate_cards_vision,
@@ -102,6 +102,32 @@ def _reap_stale_running(db: Session) -> None:
     db.commit()
 
 
+def _persist_json_mode_tier(db: Session, provider: Provider, cfg: ProviderConfig) -> None:
+    """Write back a structured-output tier the run negotiated.
+
+    Workers record a downgrade on the detached snapshot rather than on the ORM
+    row, so it has to be copied across once the fan-out is done. Worth doing
+    even when the run failed: it's a real answer from the provider about what
+    it accepts, and re-learning it costs a 400 on every slide of the next job.
+
+    Runs in a `finally`, so it must never raise - a broken Session here would
+    replace the exception that actually failed the generation with a confusing
+    database error.
+    """
+    try:
+        if cfg.json_mode_tier != provider.json_mode_tier:
+            provider.json_mode_tier = cfg.json_mode_tier
+            db.commit()
+    except Exception:
+        import logging
+
+        logging.getLogger(__name__).warning(
+            "Could not persist json_mode_tier for provider %s", provider.id,
+            exc_info=True,
+        )
+        db.rollback()
+
+
 def _run_generation(generation_id: str, force: bool = False):
     from app.database import SessionLocal
     import datetime as dt
@@ -136,10 +162,22 @@ def _run_generation(generation_id: str, force: bool = False):
 
         template_fields = template.fields or []
 
-        if gen.source_text:
-            _process_text(db, gen, provider, gen.model_name, template_fields)
-        elif gen.source_filename:
-            _process_file(db, gen, provider, gen.model_name, template_fields, provider.id, force=force)
+        # Snapshot the provider *here*, on the thread that owns `db`. The slide
+        # fan-out below calls the LLM from worker threads while this thread
+        # commits progress, and each commit expires the ORM instance - so a
+        # worker reading `provider.api_key` off the row would lazy-load it,
+        # running SQL on this Session from another thread. See ProviderConfig.
+        provider_cfg = ProviderConfig.from_row(provider)
+
+        try:
+            if gen.source_text:
+                _process_text(db, gen, provider_cfg, gen.model_name, template_fields)
+            elif gen.source_filename:
+                _process_file(
+                    db, gen, provider_cfg, gen.model_name, template_fields, force=force
+                )
+        finally:
+            _persist_json_mode_tier(db, provider, provider_cfg)
 
         gen.status = "completed"
         # Preserve a phase the processor set deliberately (e.g. the
@@ -157,7 +195,7 @@ def _run_generation(generation_id: str, force: bool = False):
         db.close()
 
 
-def _process_text(db, gen, provider, model_name, template_fields):
+def _process_text(db, gen, provider: ProviderConfig, model_name, template_fields):
     # Text is one unit of work, so the bar goes 0 -> 1 rather than per-slide.
     gen.phase = "generating"
     gen.total_slides = 1
@@ -186,7 +224,9 @@ def _process_text(db, gen, provider, model_name, template_fields):
     db.commit()
 
 
-def _process_file(db, gen, provider, model_name, template_fields, provider_id, force: bool = False):
+def _process_file(
+    db, gen, provider: ProviderConfig, model_name, template_fields, force: bool = False
+):
     filepath = os.path.join(UPLOAD_DIR, gen.source_filename)
     if not os.path.exists(filepath):
         raise Exception(f"File not found: {filepath}")

@@ -41,7 +41,7 @@ To serve the SPA from FastAPI when running the backend alone, copy `frontend/dis
 2. `POST /api/generate/from-file` creates a `Generation` row and hands `_run_generation` to FastAPI `BackgroundTasks` — **in-process**, so it dies with the server (see recovery below).
 3. `services/document_reader.py` extracts text (PyMuPDF / python-pptx / python-docx) and renders slides to JPEG. PPTX goes LibreOffice → PDF → PyMuPDF rasterize; PDF goes straight to PyMuPDF. Title/agenda slides are skipped here — `_is_title_or_blank` must consult `has_visual` first, or a figure-only slide (no text layer at all) gets dropped before the vision model ever sees it, silently and with nothing in the UI to say so.
 4. Whole-document text feeds one `generate_global_context` "syllabus" pass (capped at `MAX_CONTEXT_CHARS`), injected into every per-slide prompt.
-5. A `ThreadPoolExecutor` fans out over pending slides; each calls `generate_cards_vision` (image + speaker notes). Progress is committed per slide, which also acts as the liveness heartbeat.
+5. A `ThreadPoolExecutor` fans out over pending slides; each calls `generate_cards_vision` (image + speaker notes). Progress is committed per slide, which also acts as the liveness heartbeat. **Worker threads get a detached `ProviderConfig` snapshot, never the `Provider` ORM row** — `SessionLocal` uses the default `expire_on_commit=True`, so each per-slide commit expires the row and the next worker's `provider.api_key` read would lazy-load it, emitting SQL on the main thread's Session from another thread. That aborted roughly 3 runs in 10 with `This session is in 'prepared' state`, losing every remaining slide after the failure. Anything else that needs DB state inside a worker must be snapshotted the same way.
 6. Cards land in `cards` with `selected`/`sort_order`/`user_edited`; the review page polls the generation row for `phase`/`completed_slides`.
 
 **Templates drive everything.** `CardTemplate.fields` is a JSON list of `{name, label, description, visible}`. Each field's `description` becomes that field's instruction in the system prompt (`build_card_prompt`), and the same names generate the JSON Schema (`cards_schema`), the review grid columns, the genanki model, and the CSV column order. `LEGACY_FIELD_HINTS` in `ai_generator.py` backfills descriptions for pre-existing templates.
@@ -58,7 +58,7 @@ Cards must use LaTeX delimiters `\(...\)` / `\[...\]` — never `$...$` or `<ank
 
 ### Persistence
 
-SQLite + WAL, `foreign_keys=ON`. `backend/notes2anki.db` in dev, `/data/notes2anki.db` in Docker. **`pysqlite3` is used instead of the stdlib module** — the macOS system libsqlite3 segfaults under concurrent access from the background task plus status polling.
+SQLite + WAL, `foreign_keys=ON`. `backend/notes2anki.db` in dev, `/data/notes2anki.db` in Docker. **`pysqlite3` is used instead of the stdlib module** — the macOS system libsqlite3 segfaults under concurrent access from the background task plus status polling. Treat that attribution as unconfirmed: the generation fan-out was also using one Session across threads (see pipeline step 5), which is the documented-unsafe pattern that crash is consistent with. Now that it's fixed, whether `pysqlite3` is still needed is worth re-testing rather than assuming.
 
 Schema changes: `Base.metadata.create_all` + `ensure_columns()` (an additive `ALTER TABLE ADD COLUMN` sweep in `database.py`, with an explicit `DEFAULT` so pre-existing rows don't fail response validation). No Alembic — anything destructive needs a real migration tool.
 

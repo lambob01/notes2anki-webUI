@@ -8,6 +8,7 @@ dialect. Anthropic is the only one that needs its own request shape.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 
@@ -55,6 +56,46 @@ _FATAL_MARKERS = (
 def is_fatal_provider_error(body: str) -> bool:
     low = (body or "").lower()
     return any(marker in low for marker in _FATAL_MARKERS)
+
+
+@dataclass
+class ProviderConfig:
+    """A detached snapshot of the `providers` row, safe to use off-thread.
+
+    The generation fan-out calls the LLM from worker threads while the main
+    thread commits per-slide progress. Handing those threads the `Provider` ORM
+    instance broke runs outright: `SessionLocal` uses the default
+    ``expire_on_commit=True``, so every commit expired the instance, and the
+    next worker to read ``api_key`` triggered a lazy refresh - emitting SQL on
+    the main thread's Session from a different thread, which a Session does not
+    support. Measured on a 40-slide job with 8 workers, that was 7-26 off-thread
+    statements per run and roughly 3 runs in 10 dying part-way through with
+    "This session is in 'prepared' state; no further SQL can be emitted within
+    this transaction" - losing every remaining slide, after paying for the ones
+    already sent.
+
+    Plain values instead, read once on the owning thread. ``json_mode_tier`` is
+    the one field workers still write: a downgrade is recorded here so sibling
+    slides skip the tier this provider rejects, and the main thread persists
+    the final value to the row once the fan-out is done. Two workers
+    downgrading concurrently is harmless - they converge on the same tier - and
+    unlike the ORM attribute it touches no database.
+    """
+
+    provider_type: str
+    api_key: str | None
+    base_url: str | None
+    json_mode_tier: str | None = None
+
+    @classmethod
+    def from_row(cls, provider) -> "ProviderConfig":
+        """Snapshot a `Provider` while on the thread that owns its Session."""
+        return cls(
+            provider_type=provider.provider_type,
+            api_key=provider.api_key,
+            base_url=provider.base_url,
+            json_mode_tier=provider.json_mode_tier,
+        )
 
 
 class ChatMessage(dict):

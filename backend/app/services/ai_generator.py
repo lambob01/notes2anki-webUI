@@ -6,11 +6,11 @@ import re
 import time
 from typing import Any
 
-from app.models import Provider
 from app.llm.base import (
     AiError as _LlmError,
     BadRequest,
     FatalProviderError,
+    ProviderConfig,
     cards_schema,
     image_part,
     next_tier,
@@ -122,7 +122,7 @@ AiError = _LlmError
 
 
 def generate_cards_text(
-    provider: Provider,
+    provider: ProviderConfig,
     model_name: str,
     text: str,
     template_fields: list[dict],
@@ -149,7 +149,7 @@ def generate_cards_text(
 
 
 def generate_cards_vision(
-    provider: Provider,
+    provider: ProviderConfig,
     model_name: str,
     image_bytes: bytes,
     notes: str,
@@ -190,7 +190,7 @@ def generate_cards_vision(
 
 
 def _call_llm(
-    provider: Provider,
+    provider: ProviderConfig,
     model_name: str,
     messages: list,
     system: str | None = None,
@@ -202,6 +202,9 @@ def _call_llm(
     A provider that rejects JSON-schema mode with a 400 is retried one tier
     down rather than failing the job, which is what makes local runtimes like
     Ollama and LM Studio usable.
+
+    Runs on a worker thread during the slide fan-out, so `provider` must be a
+    detached `ProviderConfig` and never the ORM row - see its docstring.
     """
     client = build_client(
         provider.provider_type,
@@ -212,7 +215,7 @@ def _call_llm(
     schema = cards_schema(field_names) if field_names else None
     # Resume from the tier that last worked for this provider, so we don't
     # re-pay the 400 on every request.
-    tier = getattr(provider, "json_mode_tier", None) or (
+    tier = provider.json_mode_tier or (
         TIER_SCHEMA if schema else TIER_JSON_OBJECT
     )
 
@@ -230,8 +233,9 @@ def _call_llm(
                 timeout=120,
             )
             if tier != starting_tier:
-                # Remember the downgrade so sibling slides in this job - and
-                # every later job - skip the tiers this provider rejects.
+                # Remember the downgrade so sibling slides in this job - and,
+                # once the caller persists this snapshot, every later job -
+                # skip the tiers this provider rejects.
                 provider.json_mode_tier = tier
             return _extract_cards_json(raw)
         except FatalProviderError:
@@ -261,7 +265,9 @@ def _call_llm(
     raise AiError(f"AI generation failed after 3 attempts: {last_error}")
 
 
-def generate_global_context(provider: Provider, model_name: str, document_text: str) -> str:
+def generate_global_context(
+    provider: ProviderConfig, model_name: str, document_text: str
+) -> str:
     if not document_text.strip():
         return ""
 
