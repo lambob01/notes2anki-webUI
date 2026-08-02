@@ -44,7 +44,7 @@ Rules:
 4. Use LaTeX for mathematical expressions in any field. Inline math must use \\(...\\), display math must use \\[...\\]. Never use $...$ or <anki-mathjax>.
 5. Leave a field as an empty string when the content does not supply it. Never omit a key.
 6. Populate "example question" and "solution" only when the content explicitly contains an exercise, practice problem, or worked example.
-7. If a diagram is important and image occlusion would be better, create one card whose prompt starts with "RECOMMENDATION: Use Image Occlusion for".
+7. If the slide's key content is a diagram, chart, figure, or illustration that is best learned with image occlusion, return exactly one card and no others: its prompt must start with "RECOMMENDATION: Use Image Occlusion for " followed by a short name for the figure, and its "answer" field (or the template's back-content field) should list what to occlude (labels, regions, parts). Do not also generate text cards for that diagram - the single recommendation card replaces them all.
 8. Do not invent facts. If essential context is inferred from the global lecture context rather than present in the content, append "(not in slides)" to the prompt.
 9. Return valid JSON only. No code fences or explanatory text.
 

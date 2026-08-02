@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { X, ChevronLeft, ChevronRight, Trash2, CheckSquare, Square } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, Trash2, CheckSquare, Square, Layers } from 'lucide-react'
 import { LatexText } from '@/components/Latex'
 import { api } from '@/lib/api'
 
@@ -44,6 +44,9 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
   if (!card) return null
 
   const fields = card.fields || {}
+  const isOcclusion = (fields.prompt || '').startsWith(
+    'RECOMMENDATION: Use Image Occlusion'
+  )
   const displayFields = Object.entries(fields).filter(
     ([k, v]) => v && k !== 'slide_index' && k !== 'source_filename'
   )
@@ -71,6 +74,12 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+          {isOcclusion && (
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+              <Layers className="w-3.5 h-3.5" />
+              Image Occlusion recommended - create this card in Anki from the slide image
+            </span>
+          )}
           {card.slide_index != null && (
             <img
               src={api.generate.slideUrl(card.generation_id, card.slide_index)}

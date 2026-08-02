@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
 import { api } from '@/lib/api'
-import { Edit2, Trash2, Check, Eye } from 'lucide-react'
+import { Edit2, Trash2, Check, Eye, Layers } from 'lucide-react'
 import { LatexText } from '@/components/Latex'
 import { CardViewer } from '@/components/CardViewer'
 
@@ -102,6 +102,9 @@ export function CardReviewGrid({ cards }: Props) {
         {sorted.map((card: any, idx) => {
           const isEditing = editingId === card.id
           const fields = card.fields || {}
+          const isOcclusion = (fields.prompt || '').startsWith(
+            'RECOMMENDATION: Use Image Occlusion'
+          )
           const displayFields = Object.entries(fields).filter(
             ([k, v]) => v && k !== 'slide_index' && k !== 'source_filename'
           )
@@ -126,7 +129,14 @@ export function CardReviewGrid({ cards }: Props) {
                   <span className="text-xs text-gray-400">Card #{idx + 1}</span>
                 </label>
                 <div className="flex items-center gap-1">
-                  {isEditing ? (
+              {isOcclusion && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 mb-2">
+                  <Layers className="w-3.5 h-3.5" />
+                  Image Occlusion recommended - create this card in Anki from the slide image
+                </span>
+              )}
+
+              {isEditing ? (
                     <button
                       onClick={() => handleSave(card.id)}
                       className="p-1 text-green-600 hover:bg-green-50 rounded"
