@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+**/.next
+**/__pycache__
+**/*.pyc
+backend/static
+backend/notes2anki.db*
+data/
+.git/

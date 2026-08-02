@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Indeterminate progress bar: used while the slide total is still unknown
+   (document parsing / LibreOffice render), before a real percentage exists. */
+@keyframes progressSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

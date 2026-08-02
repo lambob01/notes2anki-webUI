@@ -1,0 +1,16 @@
+node_modules/
+.next/
+*.pyc
+__pycache__/
+.env
+data/
+*.db
+*.db-shm
+*.db-journal
+*.db-wal
+dist/
+backend/static/
+.secret_key
+.DS_Store
+.claude/
+example files/

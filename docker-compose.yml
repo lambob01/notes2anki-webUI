@@ -1,0 +1,22 @@
+services:
+  notes2anki:
+    build:
+      context: .
+      args:
+        # Set false for a much smaller image without the PPTX -> PDF renderer.
+        WITH_LIBREOFFICE: "true"
+    image: notes2anki-webui
+    ports:
+      - "8080:8080"
+    volumes:
+      # SQLite database, uploads, rendered slides and exports all live here.
+      - ./data:/data
+    environment:
+      # Encrypts stored provider API keys. Generate one with:
+      #   python -c "import secrets; print(secrets.token_urlsafe(32))"
+      SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env - see .env.example}
+      # Optional: set to gate the whole UI behind a password. Unset = no login,
+      # which is the intended default for a trusted LAN.
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      JOB_RETENTION_DAYS: ${JOB_RETENTION_DAYS:-7}
+    restart: unless-stopped
