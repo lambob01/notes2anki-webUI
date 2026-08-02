@@ -33,6 +33,8 @@ To serve the SPA from FastAPI when running the backend alone, copy `frontend/dis
 
 ## Notes
 
-- No test suite and no lint/typecheck config exist — verify by booting the server and curling `/api/health`, `/api/providers/presets`, etc.
+- Backend tests: `pip install -r requirements-dev.txt`, then `python -m pytest` from `backend/`. They cover pure logic only (JSON salvage parser, LaTeX, slide-skipping) — there's no route coverage and no backend linter, so verify wiring by booting the server and curling `/api/health`, `/api/providers/presets`, etc. `conftest.py` must keep redirecting `DATABASE_URL` at a temp dir: `app/__init__.py` imports `app.main`, so any `app.` import boots the app and migrates whatever DB it finds.
+- Two write paths reach Anki and must produce identical cards: `_anki_field` (`routers/export.py`) and `escapeField` (`frontend/src/lib/ankiconnect.ts`). Both escape `&`/`<`/`>` and leave LaTeX delimiters alone.
+- `_is_title_or_blank` checks `has_visual` before any text heuristic. A figure-only slide has no text layer, so a text-only check drops exactly the content the vision path exists for.
 - Vision capability is decided by provider name / model prefix in `app/config.py` (`VISION_CAPABLE_*`); update both when adding a vision model.
 - PPTX rendering depends on LibreOffice (`libreoffice-impress`); without it the PPTX path must not silently fall back to text-only.
