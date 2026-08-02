@@ -23,7 +23,7 @@ Then open http://localhost:8080. For the PPTX vision path, build with `WITH_LIBR
 
 **This app has no authentication, so compose binds it to `127.0.0.1` only.** Anyone who can reach port 8080 can spend your provider API credits, read every deck you've generated, and use `POST /api/providers/test` to make the host issue arbitrary HTTP requests to anything it can route to. Don't widen that bind, port-forward it, or put it behind a reverse proxy unless something in front is authenticating requests.
 
-Reaching it from another device safely means a private network (Tailscale/WireGuard) or auth at the proxy (mTLS, an authenticating proxy) — not exposing it directly.
+This is a property of the current server-side architecture, not a permanent one. The app is moving to a client-side design where the browser holds the API keys and the decks, leaving the server as a single stateless `POST /api/render` endpoint that stores nothing and has no credentials to steal — at which point it becomes safe to expose directly, with no VPN and no login. Until that lands, keep it on loopback. See "Client-side direction" in `PLAN.md`.
 
 ## Dev
 

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import os
-import uuid
 import csv
 import hashlib
 import io
-import tempfile
 import html
+import shutil
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import genanki
 from fastapi import APIRouter, Depends, HTTPException
@@ -47,12 +47,43 @@ def _stable_id(value: str) -> int:
     return int(digest[:12], 16)
 
 
+class _MediaStager:
+    """Collects slide images under the exact filenames the cards reference.
+
+    genanki names each packaged media file after ``os.path.basename()`` of the
+    path it is handed. Slide images live at ``{SLIDES_DIR}/{gen}/{index}.jpg``,
+    so handing over those paths packaged them as "1.jpg", "2.jpg", … while every
+    ``<img>`` tag referenced ``notes2anki_{gen}_{index}.jpg``. Nothing resolved:
+    the fields imported correctly and every picture was broken.
+
+    Generic names are also actively harmful - Anki's media folder is shared
+    across the whole collection, so a "1.jpg" from one deck overwrites another's.
+    That collision is exactly why the prefixed name exists.
+
+    Copying each image into a staging directory under its reference name makes
+    ``basename()`` yield the right thing. The directory must outlive
+    ``write_to_file``, so callers hold it open around the whole build.
+    """
+
+    def __init__(self, staging: Path):
+        self._staging = staging
+        self.files: list[str] = []
+
+    def add(self, stored: str, filename: str) -> None:
+        dest = self._staging / filename
+        if str(dest) in self.files:
+            return
+        shutil.copyfile(stored, dest)
+        self.files.append(str(dest))
+
+
 def _slide_media(gen: Generation, card: Card):
-    """The `<img>` HTML + media file path for a card's source slide.
+    """`(<img> HTML, source path, media filename)` for a card's source slide.
 
     Returns None when the card has no slide (text generations) or the stored
     image is gone. The media filename is stable per generation+slide so a card
-    re-synced to Anki resolves the same media file instead of duplicating it.
+    re-synced to Anki resolves the same media file instead of duplicating it,
+    and must match `slideMediaFilename` in the AnkiConnect client exactly.
     """
     if card.slide_index is None:
         return None
@@ -61,11 +92,11 @@ def _slide_media(gen: Generation, card: Card):
         return None
     filename = f"notes2anki_{gen.id[:8]}_{card.slide_index}.jpg"
     img_html = f'<img src="{filename}" style="max-width:100%; margin-bottom:8px">'
-    return img_html, stored
+    return img_html, stored, filename
 
 
-def _slide_image_html(gen: Generation, card: Card, media_files: list[str]) -> str:
-    """The `<img>` HTML for a card's slide, registering its media file.
+def _slide_image_html(gen: Generation, card: Card, stager: _MediaStager) -> str:
+    """The `<img>` HTML for a card's slide, staging its media file.
 
     Used by mapped exports, where the image lands in whichever Anki field the
     mapping points it at rather than being prepended to the front.
@@ -73,9 +104,8 @@ def _slide_image_html(gen: Generation, card: Card, media_files: list[str]) -> st
     media = _slide_media(gen, card)
     if not media:
         return ""
-    img_html, stored = media
-    if stored not in media_files:
-        media_files.append(stored)
+    img_html, stored, filename = media
+    stager.add(stored, filename)
     return img_html
 
 
@@ -215,60 +245,71 @@ def _build_apkg(gen: Generation, db: Session) -> str:
 
     deck = genanki.Deck(deck_id, gen.deck_name or "Default")
 
-    media_files = []
-    for card in cards:
-        fields = card.fields or {}
-        note_fields = []
-        if mapping:
-            for fn in anki_field_names:
-                parts = []
-                for source in _ordered_sources(norm.get(fn, [])):
-                    if source == "image":
-                        img = _slide_image_html(gen, card, media_files)
-                        if img:
-                            parts.append(img)
-                    else:
-                        text = _anki_field(fields.get(source, ""))
-                        if text:
-                            parts.append(text)
-                # Unmapped image: still attach the slide, on the back field.
-                if (
-                    image_field
-                    and fn == image_field
-                    and "image" not in norm.get(fn, [])
-                ):
-                    img = _slide_image_html(gen, card, media_files)
-                    if img:
-                        parts.insert(0, img)
-                if len(parts) > 1:
-                    value = "<br>".join(parts)
-                elif parts:
-                    value = parts[0]
-                else:
-                    value = ""
-                note_fields.append(value)
-        else:
-            note_fields = [_anki_field(fields.get(fn, "")) for fn in anki_field_names]
-            media = _slide_media(gen, card)
-            if media:
-                img_html, stored = media
-                front_index = next(
-                    (i for i, fn in enumerate(anki_field_names) if fn == front_field), 0
-                )
-                note_fields[front_index] = f"{img_html}{note_fields[front_index]}"
-                if stored not in media_files:
-                    media_files.append(stored)
-        note = genanki.Note(
-            model=anki_model,
-            fields=note_fields,
-            tags=["notes2anki"],
-        )
-        deck.add_note(note)
-
     filename = f"{gen.id}.apkg"
     filepath = os.path.join(EXPORT_DIR, filename)
-    package = genanki.Package(deck, media_files=media_files)
-    package.write_to_file(filepath)
+
+    # The staging directory has to outlive write_to_file - genanki reads the
+    # media files at write time, not when they are registered.
+    with TemporaryDirectory(prefix="notes2anki_apkg_") as staging:
+        stager = _MediaStager(Path(staging))
+
+        for card in cards:
+            fields = card.fields or {}
+            note_fields = []
+            if mapping:
+                for fn in anki_field_names:
+                    parts = []
+                    for source in _ordered_sources(norm.get(fn, [])):
+                        if source == "image":
+                            img = _slide_image_html(gen, card, stager)
+                            if img:
+                                parts.append(img)
+                        else:
+                            text = _anki_field(fields.get(source, ""))
+                            if text:
+                                parts.append(text)
+                    # Unmapped image: still attach the slide, on the back field.
+                    if (
+                        image_field
+                        and fn == image_field
+                        and "image" not in norm.get(fn, [])
+                    ):
+                        img = _slide_image_html(gen, card, stager)
+                        if img:
+                            parts.insert(0, img)
+                    if len(parts) > 1:
+                        value = "<br>".join(parts)
+                    elif parts:
+                        value = parts[0]
+                    else:
+                        value = ""
+                    note_fields.append(value)
+            else:
+                note_fields = [
+                    _anki_field(fields.get(fn, "")) for fn in anki_field_names
+                ]
+                media = _slide_media(gen, card)
+                if media:
+                    img_html, stored, media_name = media
+                    front_index = next(
+                        (
+                            i
+                            for i, fn in enumerate(anki_field_names)
+                            if fn == front_field
+                        ),
+                        0,
+                    )
+                    note_fields[front_index] = f"{img_html}{note_fields[front_index]}"
+                    stager.add(stored, media_name)
+            note = genanki.Note(
+                model=anki_model,
+                fields=note_fields,
+                tags=["notes2anki"],
+            )
+            deck.add_note(note)
+
+        package = genanki.Package(deck, media_files=stager.files)
+        package.write_to_file(filepath)
 
     return filepath
 
