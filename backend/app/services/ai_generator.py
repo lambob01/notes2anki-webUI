@@ -22,6 +22,11 @@ from app.llm.base import (
 from app.llm.registry import build_client
 
 
+# Long lectures are capped before the whole-document syllabus pass, so a huge
+# deck cannot blow the model's input window.
+MAX_CONTEXT_CHARS = 80_000
+
+
 CARD_PROMPT_HEADER = """You are an expert educator and spaced repetition card writer.
 
 Analyze the provided content and create high-quality Anki flashcards only for testable academic material.
@@ -33,13 +38,15 @@ Each card object must contain exactly these fields:
 {field_docs}
 
 Rules:
-1. If the content has no testable material, return {{"cards":[]}}.
+1. If the content is a title slide, agenda, overview, logistics, decorative image, or has no testable material, return {{"cards":[]}}. Never write cards about the presenter, the course, or the lecture itself.
 2. Each card must test one idea only.
 3. Use plain text. Do not use Markdown, HTML, cloze syntax, or Anki-specific tags.
-4. Use LaTeX only for mathematical expressions. Inline math must use \\(...\\), display math must use \\[...\\].
+4. Use LaTeX for mathematical expressions in any field. Inline math must use \\(...\\), display math must use \\[...\\]. Never use $...$ or <anki-mathjax>.
 5. Leave a field as an empty string when the content does not supply it. Never omit a key.
-6. Do not invent facts.
-7. Return valid JSON only. No code fences or explanatory text.
+6. Populate "example question" and "solution" only when the content explicitly contains an exercise, practice problem, or worked example.
+7. If a diagram is important and image occlusion would be better, create one card whose prompt starts with "RECOMMENDATION: Use Image Occlusion for".
+8. Do not invent facts. If essential context is inferred from the global lecture context rather than present in the content, append "(not in slides)" to the prompt.
+9. Return valid JSON only. No code fences or explanatory text.
 
 {global_context}
 {card_count_hint}
@@ -124,18 +131,21 @@ def generate_cards_text(
     global_context: str = "",
 ) -> list[dict]:
     prompt = build_card_prompt(template_fields, subject_context)
+    if global_context.strip():
+        prompt += f"\n\nGlobal lecture context:\n{global_context}"
     if custom_prompt:
         prompt = custom_prompt + "\n\n" + prompt
 
     # System goes as a separate argument: Anthropic takes it top-level, and the
     # OpenAI adapter re-inserts it as messages[0].
-    return _call_llm(
+    cards = _call_llm(
         provider,
         model_name,
         [{"role": "user", "content": text}],
         system=prompt,
         field_names=_field_names(template_fields),
     )
+    return _normalize_card_fields(cards, template_fields)
 
 
 def generate_cards_vision(
@@ -151,6 +161,8 @@ def generate_cards_vision(
     global_context: str = "",
 ) -> list[dict]:
     prompt = build_card_prompt(template_fields, subject_context)
+    if global_context.strip():
+        prompt += f"\n\nGlobal lecture context:\n{global_context}"
     if custom_prompt:
         prompt = custom_prompt + "\n\n" + prompt
 
@@ -174,7 +186,7 @@ def generate_cards_vision(
         card["slide_index"] = slide_index
         card["source_filename"] = source_filename
 
-    return cards
+    return _normalize_card_fields(cards, template_fields)
 
 
 def _call_llm(
@@ -253,6 +265,10 @@ def generate_global_context(provider: Provider, model_name: str, document_text: 
     if not document_text.strip():
         return ""
 
+    # A long lecture can exceed the model's input window; the syllabus pass
+    # only needs the arc of the course, so feed it a capped prefix.
+    document_text = document_text[:MAX_CONTEXT_CHARS]
+
     prompt = (
         "Create a concise lecture syllabus and concept map from this extracted lecture text. "
         "Focus on learning objectives and major topics. Return plain text only.\n\n"
@@ -281,6 +297,29 @@ def _field_names(template_fields: list[dict] | None) -> list[str] | None:
         return None
     names = [f.get("name") for f in template_fields if f.get("name")]
     return names or None
+
+
+def _normalize_card_fields(cards: list[dict], template_fields: list[dict] | None) -> list[dict]:
+    """Sanitize model output before it reaches the DB and Anki.
+
+    Every declared field gets LaTeX normalized so it renders in the review UI
+    and in Anki (delimiters canonicalized to \\(...\\) / \\[...\\]); the
+    "formula" field additionally gets wrapped in a single display block.
+    """
+    from app.services.latex import normalize_latex, format_formula
+
+    names = _field_names(template_fields) or []
+    normalized = []
+    for card in cards:
+        cleaned = dict(card)
+        for name in names:
+            if name in cleaned and isinstance(cleaned[name], str):
+                value = normalize_latex(cleaned[name])
+                if name.lower() == "formula":
+                    value = format_formula(value)
+                cleaned[name] = value
+        normalized.append(cleaned)
+    return normalized
 
 
 def _extract_cards_json(raw_text: str) -> list[dict]:
