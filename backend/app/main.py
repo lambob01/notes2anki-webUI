@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,14 +12,32 @@ from app.database import (
     SessionLocal,
     encrypt_legacy_api_keys,
     ensure_columns,
+    ensure_indexes,
 )
 from app.routers import providers, templates, notes, generate, cards, export, render
 
 Base.metadata.create_all(bind=engine)
 ensure_columns()
+ensure_indexes()
 encrypt_legacy_api_keys()
 
-app = FastAPI(title="notes2anki-webui", version="0.1.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Startup work, in order. Replaces the deprecated `@app.on_event`.
+
+    Both are sync and run inline, as Starlette ran sync `on_event` handlers -
+    they are short, local-SQLite, and must finish before the first request is
+    served. There is no shutdown half; generation background tasks die with the
+    process by design, and `reconcile_orphaned_generations` cleans up after
+    them on the way back up rather than on the way down, because a crash never
+    gets a shutdown hook.
+    """
+    create_default_template()
+    reconcile_orphaned_generations()
+    yield
+
+
+app = FastAPI(title="notes2anki-webui", version="0.1.0", lifespan=lifespan)
 
 # The SPA is served by this same process, so browser requests are same-origin
 # and need no CORS grant. CORS_ORIGINS stays available for the split
@@ -45,7 +64,6 @@ app.include_router(export.router, prefix="/api/export", tags=["export"])
 app.include_router(render.router, prefix="/api/render", tags=["render"])
 
 
-@app.on_event("startup")
 def create_default_template():
     from app.models import CardTemplate
     db = SessionLocal()
@@ -78,7 +96,6 @@ def create_default_template():
         db.close()
 
 
-@app.on_event("startup")
 def reconcile_orphaned_generations():
     """Fail jobs left mid-flight by a previous process.
 

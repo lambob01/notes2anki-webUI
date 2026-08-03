@@ -51,7 +51,7 @@ class ProviderModel(Base):
     __tablename__ = "provider_models"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    provider_id = Column(String, ForeignKey("providers.id", ondelete="CASCADE"), nullable=False)
+    provider_id = Column(String, ForeignKey("providers.id", ondelete="CASCADE"), nullable=False, index=True)
     model_id = Column(String, nullable=False)
     display_name = Column(String, nullable=True)
     is_custom = Column(Boolean, default=False)
@@ -93,9 +93,9 @@ class Generation(Base):
     source_type = Column(String, nullable=False)
     source_filename = Column(String, nullable=True)
     source_text = Column(Text, nullable=True)
-    provider_id = Column(String, ForeignKey("providers.id"), nullable=False)
+    provider_id = Column(String, ForeignKey("providers.id"), nullable=False, index=True)
     model_name = Column(String, nullable=False)
-    template_id = Column(String, ForeignKey("card_templates.id"), nullable=False)
+    template_id = Column(String, ForeignKey("card_templates.id"), nullable=False, index=True)
     deck_name = Column(String, default="Default")
     custom_prompt = Column(Text, nullable=True)
     subject_context = Column(String, nullable=True)
@@ -126,7 +126,10 @@ class Card(Base):
     __tablename__ = "cards"
 
     id = Column(String, primary_key=True, default=generate_uuid)
-    generation_id = Column(String, ForeignKey("generations.id", ondelete="CASCADE"), nullable=False)
+    # SQLite creates no index to back a foreign key, so without this every card
+    # fetch, export, and cascading delete scans the whole table - including the
+    # review page's 1s progress poll.
+    generation_id = Column(String, ForeignKey("generations.id", ondelete="CASCADE"), nullable=False, index=True)
     slide_index = Column(Integer, nullable=True)
     fields = Column(JSON, nullable=False)
     selected = Column(Boolean, default=True)

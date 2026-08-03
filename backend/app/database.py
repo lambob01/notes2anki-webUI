@@ -7,9 +7,21 @@ from app.config import DATABASE_URL
 
 IS_SQLITE = "sqlite" in DATABASE_URL
 
-# The macOS system libsqlite3 (3.43.2) segfaults under concurrent access from
-# the generation background task and the status-polling requests, taking the
-# whole server down. pysqlite3 bundles a modern SQLite instead.
+# The macOS system libsqlite3 (3.43.2) was blamed for segfaulting under
+# concurrent access from the generation background task and the status-polling
+# requests, taking the whole server down. pysqlite3 bundles a modern SQLite.
+#
+# That attribution is doubtful. It was made while the fan-out was also sharing
+# one Session across threads (TODO item 1) - the documented-unsafe pattern the
+# crash is equally consistent with, and which has since been fixed. Replaying
+# the app's access pattern (40 slides, 8 worker threads, 2 pollers, per-slide
+# commits on the main Session) 10x against stdlib 3.43.2 now completes clean,
+# as does pysqlite3.
+#
+# Kept anyway: 10 rounds of a synthetic workload does not disprove a
+# probabilistic segfault, and the failure mode is the whole server dying. If
+# you want to drop it, get evidence from the real pipeline under real load
+# first - the cost of being wrong is much higher than one dependency.
 if IS_SQLITE:
     import pysqlite3 as sqlite3
 
@@ -85,6 +97,22 @@ def ensure_columns():
                         f'ADD COLUMN "{column.name}" {ddl}{default_sql}'
                     )
                 )
+
+
+def ensure_indexes():
+    """Create indexes declared on the models but missing from the database.
+
+    ``Base.metadata.create_all`` only looks at whether the *table* exists; if it
+    does, the table is skipped wholesale and any index added to the model later
+    is never created. So an `index=True` on an existing table reaches fresh
+    databases only - which is how the foreign-key columns ended up unindexed
+    everywhere but a clean install. `checkfirst` makes this a no-op once the
+    index is there.
+    """
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            for index in table.indexes:
+                index.create(bind=conn, checkfirst=True)
 
 
 def encrypt_legacy_api_keys():

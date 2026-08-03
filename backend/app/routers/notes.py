@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import hashlib
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException
 
 from app.config import UPLOAD_DIR
 

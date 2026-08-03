@@ -22,12 +22,17 @@ cd frontend && npm run build
 cd backend && python -m pytest
 cd backend && python -m pytest tests/test_latex.py::test_format_formula_wraps_bare_formula
 
+# Backend lint
+cd backend && ruff check .
+
 # Full app — needs SECRET_KEY in .env (see .env.example)
 docker compose up --build
 # Build with WITH_LIBREOFFICE=false to drop the ~600MB LibreOffice layer (kills the PPTX vision path)
 ```
 
-Backend tests cover only the pure logic that breaks silently — the JSON salvage parser, LaTeX normalization, and the slide-skipping heuristics. There is no route/integration coverage and no backend linter, so verify wiring changes by booting uvicorn and curling: `/api/health`, `/api/providers/presets`, `/api/templates`.
+Backend tests cover only the pure logic that breaks silently — the JSON salvage parser, LaTeX normalization, and the slide-skipping heuristics. There is no route/integration coverage, so verify wiring changes by booting uvicorn and curling: `/api/health`, `/api/providers/presets`, `/api/templates`.
+
+`ruff check .` from `backend/` (config in `backend/ruff.toml`) is the backend linter. It is deliberately narrow — ruff's default `E4/E7/E9/F` — to catch unused imports and undefined names, not to restyle. `E712` is ignored because `Column == True` is how SQLAlchemy writes a boolean filter. Frontend lint still doesn't exist.
 
 `backend/conftest.py` redirects `DATABASE_URL` and the data dirs at a temp directory **before the first `app` import**, because `app/__init__.py` does `from app.main import app` — importing anything under `app.` boots the whole application (`create_all`, `ensure_columns`, the legacy-key encryption pass). Without that redirect, running the tests migrates the developer's real `backend/notes2anki.db`.
 
@@ -77,7 +82,7 @@ Cards must use LaTeX delimiters `\(...\)` / `\[...\]` — never `$...$` or `<ank
 
 ### Persistence
 
-SQLite + WAL, `foreign_keys=ON`. `backend/notes2anki.db` in dev, `/data/notes2anki.db` in Docker. **`pysqlite3` is used instead of the stdlib module** — the macOS system libsqlite3 segfaults under concurrent access from the background task plus status polling. Treat that attribution as unconfirmed: the generation fan-out was also using one Session across threads (see pipeline step 5), which is the documented-unsafe pattern that crash is consistent with. Now that it's fixed, whether `pysqlite3` is still needed is worth re-testing rather than assuming.
+SQLite + WAL, `foreign_keys=ON`. `backend/notes2anki.db` in dev, `/data/notes2anki.db` in Docker. **`pysqlite3` is used instead of the stdlib module** — the macOS system libsqlite3 segfaults under concurrent access from the background task plus status polling. Treat that attribution as unconfirmed: the generation fan-out was also using one Session across threads (see pipeline step 5), which is the documented-unsafe pattern that crash is consistent with. **Re-tested since the fix** — replaying the access pattern (40 slides, 8 workers, 2 pollers, per-slide commits on the main Session) 10× against stdlib 3.43.2 completes clean, so item 1 was most likely the real cause. `pysqlite3` is kept regardless: a synthetic pass doesn't disprove a probabilistic segfault whose blast radius is the whole process. Dropping it needs evidence from the real pipeline under real load.
 
 Schema changes: `Base.metadata.create_all` + `ensure_columns()` (an additive `ALTER TABLE ADD COLUMN` sweep in `database.py`, with an explicit `DEFAULT` so pre-existing rows don't fail response validation). No Alembic — anything destructive needs a real migration tool.
 
@@ -103,7 +108,7 @@ AnkiConnect calls run **from the browser** against `http://127.0.0.1:8765` (`fro
 
 ### Vision capability
 
-Decided by provider name / model prefix in `app/config.py` (`VISION_CAPABLE_PROVIDERS`, `VISION_CAPABLE_MODEL_PREFIXES`) — update both when adding a vision model.
+Decided by `_is_vision_capable` in `routers/providers.py` — provider type first (groq is denied outright; gemini and anthropic match against their own prefix lists), then a model-id prefix check. **That function is the only place; add new vision models there.** `config.py` used to carry a `VISION_CAPABLE_*` pair that nothing imported and that had drifted out of sync — it's gone, and it was wrong when it went (it listed `deepseek-r1`, which has no vision).
 
 ## Frontend
 

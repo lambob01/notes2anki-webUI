@@ -38,8 +38,11 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /app
 
+# No libgl1-mesa-glx here: it was an OpenCV dependency, this image has no
+# OpenCV (PyMuPDF rasterizes without libGL), and Debian 12 dropped the package
+# outright - so installing it failed the build on bookworm, which is what
+# python:3.12-slim is. Don't "fix" it by swapping in libgl1; just leave it out.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      libgl1-mesa-glx \
       libglib2.0-0 \
       fonts-dejavu-core \
     && if [ "$WITH_LIBREOFFICE" = "true" ]; then \

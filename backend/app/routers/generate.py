@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import hashlib
+import logging
 import os
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
-from sqlalchemy import update
 
-from app.database import get_db, generate_uuid
-from app.models import Provider, ProviderModel, CardTemplate, Generation, Card, ProcessedSlide
+from app.database import get_db
+from app.models import Provider, CardTemplate, Generation, Card, ProcessedSlide
 from app.schemas import GenerateRequest, GenerationSchema
-from app.config import UPLOAD_DIR, HISTORY_DIR, SLIDES_DIR
-from app.services.document_reader import DocumentReader, DocumentSlide
+from app.config import UPLOAD_DIR, SLIDES_DIR, EXPORT_DIR
+from app.services.document_reader import DocumentReader
 from app.llm.base import FatalProviderError, ProviderConfig
 from app.services.ai_generator import (
     generate_cards_text,
@@ -22,7 +22,6 @@ from app.services.ai_generator import (
     generate_global_context,
     AiError,
 )
-import json
 
 router = APIRouter()
 
@@ -119,8 +118,6 @@ def _persist_json_mode_tier(db: Session, provider: Provider, cfg: ProviderConfig
             provider.json_mode_tier = cfg.json_mode_tier
             db.commit()
     except Exception:
-        import logging
-
         logging.getLogger(__name__).warning(
             "Could not persist json_mode_tier for provider %s", provider.id,
             exc_info=True,
@@ -132,6 +129,10 @@ def _run_generation(generation_id: str, force: bool = False):
     from app.database import SessionLocal
     import datetime as dt
     db = SessionLocal()
+    # Bound before the try so the failure handler can distinguish "never loaded
+    # the row" from "the run itself failed". Reading an unbound `gen` in the
+    # handler raised NameError *over* the real exception.
+    gen = None
     try:
         gen = db.query(Generation).filter(Generation.id == generation_id).first()
         if not gen:
@@ -187,10 +188,27 @@ def _run_generation(generation_id: str, force: bool = False):
         gen.completed_at = dt.datetime.utcnow()
         db.commit()
     except Exception as e:
-        gen.status = "failed"
-        gen.phase = "failed"
-        gen.error_message = str(e)
-        db.commit()
+        # This handler is the only thing standing between a crashed run and a
+        # row that says `running` forever, so it must not raise. Two ways it
+        # used to: `gen` unbound if the initial query threw, and the commit
+        # below failing on a Session already broken by whatever killed the run
+        # (see the 'prepared state' failure in TODO item 1). Either escapes a
+        # BackgroundTasks worker, where nothing catches it, and the run then
+        # hangs in the UI until _reap_stale_running gets to it minutes later.
+        logger = logging.getLogger(__name__)
+        logger.exception("Generation %s failed", generation_id)
+        try:
+            if gen is not None:
+                gen.status = "failed"
+                gen.phase = "failed"
+                gen.error_message = str(e)
+                db.commit()
+        except Exception:
+            logger.exception(
+                "Generation %s failed, and marking it failed also failed; "
+                "leaving it for _reap_stale_running", generation_id,
+            )
+            db.rollback()
     finally:
         db.close()
 
@@ -488,6 +506,53 @@ def delete_generation(generation_id: str, db: Session = Depends(get_db)):
     gen = db.query(Generation).filter(Generation.id == generation_id).first()
     if not gen:
         raise HTTPException(404, "Generation not found")
+
+    # Captured before the delete, because the upload refcount below has to be
+    # taken with this row already gone to be meaningful.
+    source_filename = gen.source_filename
+
     db.delete(gen)
     db.commit()
+
+    # Dropping the row cascades to cards but used to leave every file behind,
+    # so the disk only ever grew.
+    _rmtree_quietly(os.path.join(SLIDES_DIR, generation_id))
+    for ext in ("apkg", "csv"):
+        _unlink_quietly(os.path.join(EXPORT_DIR, f"{generation_id}.{ext}"))
+
+    # Uploads are stored under a content-hash filename and are therefore
+    # SHARED: re-running the same lecture reuses one file across many
+    # generations (on the dev DB, 25 generations over 4 uploads, one of them
+    # referenced 20 times). Deleting it with any referrer left would break all
+    # of them, so it goes only when the last one does.
+    if source_filename:
+        still_referenced = (
+            db.query(Generation)
+            .filter(Generation.source_filename == source_filename)
+            .first()
+        )
+        if not still_referenced:
+            _unlink_quietly(os.path.join(UPLOAD_DIR, source_filename))
+
     return {"ok": True}
+
+
+def _unlink_quietly(path: str) -> None:
+    """Best-effort delete. A missing or unremovable file must not fail the API
+    call - the database row is already gone, and reporting an error would
+    invite a retry that 404s."""
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logging.getLogger(__name__).warning("Could not delete %s", path, exc_info=True)
+
+
+def _rmtree_quietly(path: str) -> None:
+    try:
+        shutil.rmtree(path)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        logging.getLogger(__name__).warning("Could not delete %s", path, exc_info=True)

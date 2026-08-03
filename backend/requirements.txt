@@ -3,17 +3,21 @@ uvicorn[standard]>=0.30.0
 sqlalchemy>=2.0
 pysqlite3>=0.5.0; platform_system == "Darwin"
 pysqlite3-binary>=0.5.3; platform_system != "Darwin"
-aiosqlite>=0.20.0
 python-multipart>=0.0.9
-openai>=1.0
-anthropic>=0.40.0
-genanki>=0.13.3
+# The LLM adapters speak HTTP directly (app/llm/openai_compat.py,
+# anthropic_client.py) rather than using the vendor SDKs - see the adapter
+# table in PLAN.md. httpx must therefore be declared here in its own right:
+# it used to arrive only as a transitive dependency of the openai and
+# anthropic packages, so dropping those unused SDKs without this line would
+# have taken httpx with them and broken every provider call.
+httpx>=0.27.0
+# 0.13.1 is the newest genanki that exists; the tree shipped `>=0.13.3` from
+# the initial commit, which no index can satisfy - so a clean
+# `pip install -r requirements.txt` (and the Docker build) failed here.
+genanki>=0.13.1
 pymupdf>=1.24.0
 python-pptx>=0.6.23
 python-docx>=1.1.0
 Pillow>=10.0
-python-dotenv>=1.0
 pydantic>=2.0
-aiofiles>=24.0
-aiohttp>=3.9.0
 cryptography>=42.0

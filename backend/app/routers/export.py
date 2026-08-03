@@ -314,7 +314,41 @@ def _build_apkg(gen: Generation, db: Session) -> str:
     return filepath
 
 
+def _csv_columns(template: CardTemplate | None) -> tuple[list[str], dict[str, list[str]] | None]:
+    """Column names, and the source mapping when the template has one.
+
+    Mirrors how `_build_apkg` picks its fields, so a template built from a real
+    Anki note type exports the same columns either way.
+    """
+    mapping = dict(template.mapping or {}) if template else {}
+    if mapping:
+        norm = _normalize_mapping(mapping)
+        names = [f for f in (template.anki_fields or []) if f] or list(norm.keys())
+        return names, norm
+
+    fields_list = template.fields if template else []
+    names = [f["name"] for f in fields_list] if fields_list else ["prompt", "answer"]
+    return names, None
+
+
 def _build_csv(gen: Generation, db: Session) -> str:
+    """CSV export. Honours `mapping` and escapes exactly like the other paths.
+
+    This used to read `template.fields` unconditionally, so a template mapped
+    onto a user's own Anki note type exported the *app's* field names with
+    unconcatenated values - columns that matched neither the note type nor what
+    `.apkg` produced from the same rows.
+
+    It also wrote field values raw while `_build_apkg` ran them through
+    `_anki_field`. Anki treats imported CSV values as HTML, so an unescaped
+    `<` or `&` rendered differently depending on which file you imported - the
+    same class of divergence the `_anki_field`/`escapeField` invariant exists
+    to prevent.
+
+    Images are the one thing CSV genuinely cannot carry: there is no media
+    sidecar, so an `<img>` tag here would reference a file Anki never received.
+    `image` sources are skipped; use `.apkg` or AnkiConnect for slide pictures.
+    """
     cards = db.query(Card).filter(
         Card.generation_id == gen.id,
         Card.selected == True,
@@ -324,8 +358,7 @@ def _build_csv(gen: Generation, db: Session) -> str:
         raise HTTPException(400, "No selected cards to export")
 
     template = db.query(CardTemplate).filter(CardTemplate.id == gen.template_id).first()
-    fields_list = template.fields if template else []
-    field_names = [f["name"] for f in fields_list] if fields_list else ["prompt", "answer"]
+    field_names, norm = _csv_columns(template)
 
     output = io.StringIO()
     writer = csv.writer(output)
@@ -333,7 +366,20 @@ def _build_csv(gen: Generation, db: Session) -> str:
 
     for card in cards:
         fields = card.fields or {}
-        writer.writerow([fields.get(fn, "") for fn in field_names])
+        if norm is None:
+            row = [_anki_field(fields.get(fn, "")) for fn in field_names]
+        else:
+            row = []
+            for fn in field_names:
+                parts = []
+                for source in _ordered_sources(norm.get(fn, [])):
+                    if source == "image":
+                        continue
+                    text = _anki_field(fields.get(source, ""))
+                    if text:
+                        parts.append(text)
+                row.append("<br>".join(parts))
+        writer.writerow(row)
 
     filename = f"{gen.id}.csv"
     filepath = os.path.join(EXPORT_DIR, filename)

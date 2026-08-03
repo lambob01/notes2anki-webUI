@@ -19,7 +19,6 @@ from app.llm.base import (
     FatalProviderError,
     is_fatal_provider_error,
     TIER_SCHEMA,
-    TIER_JSON_OBJECT,
 )
 
 ANTHROPIC_VERSION = "2023-06-01"

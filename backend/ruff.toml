@@ -1,0 +1,13 @@
+target-version = "py312"
+
+[lint]
+# Ruff's default set (E4/E7/E9 + F). Deliberately narrow: this exists to catch
+# the things that are silently wrong - unused imports, undefined names - not to
+# restyle the codebase. `I` (import sorting) is a safe, autofixable next step
+# but reorders imports in ~17 files, so it belongs in its own commit.
+select = ["E4", "E7", "E9", "F"]
+
+# `Column == True` is how you write a boolean filter in SQLAlchemy; the
+# suggested `if Column:` rewrite is a different expression, which is why ruff
+# marks the fix unsafe. All five occurrences are inside .filter() calls.
+ignore = ["E712"]
