@@ -53,6 +53,7 @@ export const api = {
     get: (id: string) => request<any>(`/api/generate/${id}`),
     list: () => request<any[]>('/api/generate'),
     delete: (id: string) => request<any>(`/api/generate/${id}`, { method: 'DELETE' }),
+    clear: () => request<any>('/api/generate', { method: 'DELETE' }),
     // The rendered image of the slide a card was generated from (null
     // slide_index on text generations; may 404 for old jobs).
     slideUrl: (genId: string, slideIndex: number) =>
