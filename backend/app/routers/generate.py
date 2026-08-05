@@ -516,6 +516,44 @@ def list_generations(db: Session = Depends(get_db)):
     return db.query(Generation).order_by(Generation.created_at.desc()).all()
 
 
+@router.delete("")
+def clear_generations(db: Session = Depends(get_db)):
+    """Delete every generation and reset all per-generation state.
+
+    Refused while any job is running or pending: deleting a running job's row
+    would orphan its background task, which keeps calling the LLM until it
+    finishes. SQLite enforces `ondelete="CASCADE"` on cards, so deleting the
+    generation rows also removes their cards.
+    """
+    running = (
+        db.query(Generation)
+        .filter(Generation.status.in_(["running", "pending"]))
+        .count()
+    )
+    if running:
+        raise HTTPException(
+            409,
+            f"{running} generation(s) are still running. "
+            "Wait for them to finish before clearing history.",
+        )
+
+    deleted = db.query(Generation).count()
+    db.query(Generation).delete(synchronize_session=False)
+    db.query(ProcessedSlide).delete(synchronize_session=False)
+    db.commit()
+
+    # Every generation is gone, so every upload, slide dir and export is
+    # orphaned (uploads are only shared *between* generations).
+    for name in os.listdir(UPLOAD_DIR):
+        _unlink_quietly(os.path.join(UPLOAD_DIR, name))
+    for name in os.listdir(SLIDES_DIR):
+        _rmtree_quietly(os.path.join(SLIDES_DIR, name))
+    for name in os.listdir(EXPORT_DIR):
+        _unlink_quietly(os.path.join(EXPORT_DIR, name))
+
+    return {"deleted": deleted}
+
+
 @router.delete("/{generation_id}")
 def delete_generation(generation_id: str, db: Session = Depends(get_db)):
     gen = db.query(Generation).filter(Generation.id == generation_id).first()

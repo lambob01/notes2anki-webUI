@@ -11,10 +11,10 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from app.config import SLIDES_DIR, UPLOAD_DIR
+from app.config import EXPORT_DIR, SLIDES_DIR, UPLOAD_DIR
 from app.database import SessionLocal
 from app.main import app
-from app.models import CardTemplate, Generation, ProcessedSlide, Provider
+from app.models import Card, CardTemplate, Generation, ProcessedSlide, Provider
 
 
 def _seed(tag, statuses):
@@ -104,3 +104,68 @@ def test_delete_keeps_dedup_when_upload_still_referenced():
         assert remaining == 1  # the row for the still-referenced upload's file
     finally:
         db.close()
+
+
+def test_clear_all_removes_rows_cards_files_and_dedup():
+    tag = uuid.uuid4().hex[:8]
+    gens = _seed(tag, ["completed", "completed"])
+    upload_paths = [os.path.join(UPLOAD_DIR, u) for _, u in gens]
+    # give the first generation a card + export artifact
+    db = SessionLocal()
+    try:
+        g = db.query(Generation).filter(Generation.id == gens[0][0]).first()
+        db.add(Card(generation_id=g.id, slide_index=0, fields={"prompt": "q"}))
+        count_before = db.query(Generation).count()
+        db.commit()
+    finally:
+        db.close()
+    apkg = os.path.join(EXPORT_DIR, f"{gens[0][0]}.apkg")
+    with open(apkg, "wb") as f:
+        f.write(b"zip")
+
+    with TestClient(app) as c:
+        r = c.delete("/api/generate")
+        assert r.status_code == 200
+        assert r.json()["deleted"] == count_before
+
+    db = SessionLocal()
+    try:
+        assert db.query(Generation).count() == 0
+        assert db.query(Card).count() == 0
+        assert db.query(ProcessedSlide).count() == 0
+    finally:
+        db.close()
+    for p in upload_paths:
+        assert not os.path.exists(p)
+    assert not os.path.exists(os.path.join(SLIDES_DIR, gens[0][0]))
+    assert not os.path.exists(apkg)
+
+
+def test_clear_all_blocked_while_any_generation_running():
+    tag = uuid.uuid4().hex[:8]
+    with TestClient(app) as c:
+        # Seeded inside the app context: entering TestClient runs the startup
+        # handler that marks pre-existing running/pending rows as failed.
+        _seed(tag, ["completed", "running"])
+        db = SessionLocal()
+        try:
+            count_before = db.query(Generation).count()
+        finally:
+            db.close()
+
+        r = c.delete("/api/generate")
+
+        assert r.status_code == 409
+        db = SessionLocal()
+        try:
+            assert db.query(Generation).count() == count_before
+        finally:
+            db.close()
+
+
+def test_clear_all_with_empty_history():
+    with TestClient(app) as c:
+        c.delete("/api/generate")  # clear whatever earlier tests left behind
+        r = c.delete("/api/generate")
+        assert r.status_code == 200
+        assert r.json()["deleted"] == 0
