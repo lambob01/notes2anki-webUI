@@ -548,6 +548,13 @@ def delete_generation(generation_id: str, db: Session = Depends(get_db)):
         )
         if not still_referenced:
             _unlink_quietly(os.path.join(UPLOAD_DIR, source_filename))
+            # The upload is gone; its dedup markers must go too, or the next
+            # upload of the same lecture reports every slide as already
+            # processed and generates zero cards.
+            db.query(ProcessedSlide).filter(
+                ProcessedSlide.source_filename == source_filename
+            ).delete(synchronize_session=False)
+            db.commit()
 
     return {"ok": True}
 
