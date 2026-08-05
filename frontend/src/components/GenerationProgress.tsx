@@ -39,30 +39,30 @@ export function GenerationProgress({
     : 0
 
   return (
-    <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3">
+    <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3 dark:bg-gray-800 dark:border-gray-700">
       <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-indigo-600 animate-pulse" />
-        <span className="text-sm font-medium text-gray-700">{label}</span>
+        <Icon className="w-4 h-4 text-red-600 animate-pulse dark:text-red-400" />
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
         {determinate && (
-          <span className="text-sm text-gray-400 ml-auto tabular-nums">
+          <span className="text-sm text-gray-400 ml-auto tabular-nums dark:text-gray-500">
             {completedSlides} / {totalSlides} slides
           </span>
         )}
       </div>
 
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+      <div className="h-2 bg-gray-100 rounded-full overflow-hidden dark:bg-gray-700">
         {determinate ? (
           <div
-            className="h-full bg-indigo-600 rounded-full transition-[width] duration-500 ease-out"
+            className="h-full bg-red-600 rounded-full transition-[width] duration-500 ease-out"
             style={{ width: `${pct}%` }}
           />
         ) : (
           // Indeterminate: a sliding bar, since we can't know the total yet.
-          <div className="h-full w-1/3 bg-indigo-400 rounded-full animate-[progressSlide_1.4s_ease-in-out_infinite]" />
+          <div className="h-full w-1/3 bg-red-400 rounded-full animate-[progressSlide_1.4s_ease-in-out_infinite]" />
         )}
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-400">
+      <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
         <span>
           {cardsGenerated > 0
             ? `${cardsGenerated} card${cardsGenerated === 1 ? '' : 's'} so far`

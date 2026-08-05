@@ -83,7 +83,7 @@ export function CardReviewGrid({ cards }: Props) {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-gray-300">
             <input
               type="checkbox"
               checked={cards.length > 0 && cards.every((c: any) => c.selected)}
@@ -113,7 +113,9 @@ export function CardReviewGrid({ cards }: Props) {
             <div
               key={card.id}
               className={`border rounded-xl p-4 transition-colors ${
-                card.selected ? 'bg-white border-gray-200' : 'bg-gray-100 border-gray-300 opacity-70'
+                card.selected
+                  ? 'bg-white border-gray-200 dark:bg-gray-800 dark:border-gray-700'
+                  : 'bg-gray-100 border-gray-300 opacity-70 dark:bg-gray-700/50 dark:border-gray-600'
               }`}
             >
               <div className="flex items-start justify-between mb-3">
@@ -126,11 +128,11 @@ export function CardReviewGrid({ cards }: Props) {
                     }
                     className="rounded mt-0.5"
                   />
-                  <span className="text-xs text-gray-400">Card #{idx + 1}</span>
+                  <span className="text-xs text-gray-400 dark:text-gray-500">Card #{idx + 1}</span>
                 </label>
                 <div className="flex items-center gap-1">
               {isOcclusion && (
-                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 mb-2">
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 mb-2 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
                   <Layers className="w-3.5 h-3.5" />
                   Image Occlusion recommended - create this card in Anki from the slide image
                 </span>
@@ -153,7 +155,7 @@ export function CardReviewGrid({ cards }: Props) {
                   )}
                   <button
                     onClick={() => setViewIndex(idx)}
-                    className="p-1 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                    className="p-1 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
                     title="Quick view (arrow keys to navigate)"
                   >
                     <Eye className="w-4 h-4" />

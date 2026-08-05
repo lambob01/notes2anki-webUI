@@ -120,14 +120,14 @@ export default function DashboardPage() {
     <div className="space-y-8">
       <div>
         <h1 className="text-2xl font-bold">Create Flashcards</h1>
-        <p className="text-gray-500 mt-1">Upload lecture notes or paste text to generate Anki cards</p>
+        <p className="text-gray-500 mt-1 dark:text-gray-400">Upload lecture notes or paste text to generate Anki cards</p>
       </div>
 
       <div className="flex gap-2 mb-4">
         <button
           onClick={() => switchMode('file')}
           className={`px-4 py-2 rounded-lg text-sm font-medium ${
-            mode === 'file' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
+            mode === 'file' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
           }`}
         >
           File Upload
@@ -135,7 +135,7 @@ export default function DashboardPage() {
         <button
           onClick={() => switchMode('text')}
           className={`px-4 py-2 rounded-lg text-sm font-medium ${
-            mode === 'text' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600'
+            mode === 'text' ? 'bg-red-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300'
           }`}
         >
           Text Input
@@ -151,20 +151,20 @@ export default function DashboardPage() {
             placeholder="Title (optional)"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           />
           <textarea
             placeholder="Paste your lecture notes, study text, or any content here..."
             value={textInput}
             onChange={(e) => setTextInput(e.target.value)}
             rows={12}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           />
         </div>
       )}
 
       {uploadedFile?.already_processed && (
-        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700">
+        <div className="flex items-start gap-2 bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-700 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>
             This file was already processed before ({uploadedFile.processed_slides} slide(s)).
@@ -184,7 +184,7 @@ export default function DashboardPage() {
       <button
         onClick={handleGenerate}
         disabled={generating}
-        className="w-full py-3 bg-indigo-600 text-white rounded-lg font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+        className="w-full py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 transition-colors"
       >
         {generating ? 'Generating...' : 'Generate Flashcards'}
       </button>

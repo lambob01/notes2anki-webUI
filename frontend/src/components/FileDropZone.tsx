@@ -35,17 +35,17 @@ export function FileDropZone({ onFile, uploadedFile }: Props) {
 
   if (uploadedFile) {
     return (
-      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg">
-        <File className="w-5 h-5 text-green-600" />
+      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-900/30 dark:border-green-800">
+        <File className="w-5 h-5 text-green-600 dark:text-green-400" />
         <div className="flex-1">
-          <p className="text-sm font-medium text-green-800">{uploadedFile.filename}</p>
-          <p className="text-xs text-green-600">
+          <p className="text-sm font-medium text-green-800 dark:text-green-300">{uploadedFile.filename}</p>
+          <p className="text-xs text-green-600 dark:text-green-400">
             {(uploadedFile.size_bytes / 1024).toFixed(1)} KB &middot; {uploadedFile.extension}
           </p>
         </div>
         <button
           onClick={() => onFile(null!)}
-          className="text-green-600 hover:text-green-800"
+          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
         >
           <X className="w-4 h-4" />
         </button>
@@ -59,18 +59,18 @@ export function FileDropZone({ onFile, uploadedFile }: Props) {
       className={clsx(
         'border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors',
         isDragActive
-          ? 'border-indigo-400 bg-indigo-50'
-          : 'border-gray-300 hover:border-indigo-300 hover:bg-gray-50'
+          ? 'border-red-600 bg-red-50 dark:border-red-500 dark:bg-red-900/30'
+          : 'border-red-300 hover:border-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:border-red-500 dark:hover:bg-red-900/20'
       )}
     >
       <input {...getInputProps()} />
-      <Upload className="w-10 h-10 text-gray-400 mx-auto mb-3" />
-      <p className="text-sm text-gray-600">
+      <Upload className="w-10 h-10 text-red-600 mx-auto mb-3 dark:text-red-400" />
+      <p className="text-sm text-gray-600 dark:text-gray-300">
         {isDragActive
           ? 'Drop your file here...'
           : 'Drag and drop a file, or click to browse'}
       </p>
-      <p className="text-xs text-gray-400 mt-1">
+      <p className="text-xs text-gray-400 mt-1 dark:text-gray-500">
         PDF, PPTX, DOCX, TXT, MD, PNG, JPG, BMP, GIF, WEBP
       </p>
     </div>

@@ -57,16 +57,16 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col dark:bg-gray-800"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
-          <span className="text-sm font-medium text-gray-600 tabular-nums">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 dark:border-gray-700">
+          <span className="text-sm font-medium text-gray-600 tabular-nums dark:text-gray-300">
             Card {index + 1} / {cards.length}
           </span>
           <button
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+            className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg dark:hover:text-gray-300 dark:hover:bg-gray-700"
             title="Close (Esc)"
           >
             <X className="w-5 h-5" />
@@ -75,7 +75,7 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
 
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
           {isOcclusion && (
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-700 bg-amber-50 border border-amber-200 rounded-full px-2.5 py-1 dark:bg-amber-900/30 dark:border-amber-800 dark:text-amber-300">
               <Layers className="w-3.5 h-3.5" />
               Image Occlusion recommended - create this card in Anki from the slide image
             </span>
@@ -85,29 +85,29 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
               src={api.generate.slideUrl(card.generation_id, card.slide_index)}
               alt={`Source slide ${card.slide_index}`}
               onError={(e) => (e.currentTarget.style.display = 'none')}
-              className="w-full rounded-lg border border-gray-100"
+              className="w-full rounded-lg border border-gray-100 dark:border-gray-700"
             />
           )}
           {displayFields.length === 0 && (
-            <p className="text-sm text-gray-400 italic">Empty card</p>
+            <p className="text-sm text-gray-400 italic dark:text-gray-500">Empty card</p>
           )}
           {displayFields.map(([key, value]) => (
             <div key={key}>
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wide dark:text-gray-500">
                 {FIELD_LABELS[key] || key}
               </span>
-              <div className="text-sm text-gray-800 mt-1 leading-relaxed break-words">
+              <div className="text-sm text-gray-800 mt-1 leading-relaxed break-words dark:text-gray-100">
                 <LatexText text={String(value)} />
               </div>
             </div>
           ))}
         </div>
 
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
+        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 dark:border-gray-700">
           <button
             onClick={() => onIndexChange(Math.max(0, index - 1))}
             disabled={index === 0}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-40"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             <ChevronLeft className="w-4 h-4" /> Prev
           </button>
@@ -118,8 +118,8 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
               title={card.selected ? 'Deselect' : 'Select'}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-colors ${
                 card.selected
-                  ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-red-50 text-red-700 hover:bg-red-100 dark:bg-red-900/40 dark:text-red-300 dark:hover:bg-red-900/60'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
               }`}
             >
               {card.selected ? <CheckSquare className="w-4 h-4" /> : <Square className="w-4 h-4" />}
@@ -127,7 +127,7 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
             </button>
             <button
               onClick={() => onDelete(card)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-lg dark:hover:bg-red-900/30"
             >
               <Trash2 className="w-4 h-4" /> Delete
             </button>
@@ -136,7 +136,7 @@ export function CardViewer({ cards, index, onIndexChange, onClose, onToggleSelec
           <button
             onClick={() => onIndexChange(Math.min(cards.length - 1, index + 1))}
             disabled={index >= cards.length - 1}
-            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-40"
+            className="flex items-center gap-1 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg disabled:opacity-40 dark:text-gray-300 dark:hover:bg-gray-700"
           >
             Next <ChevronRight className="w-4 h-4" />
           </button>

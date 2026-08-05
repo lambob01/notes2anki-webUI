@@ -71,16 +71,16 @@ export function ExportPanel({
   }
 
   return (
-    <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3">
+    <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3 dark:bg-gray-800 dark:border-gray-700">
       <div className="flex items-center gap-3 flex-wrap">
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-500 dark:text-gray-400">
           {selectedCount} card{selectedCount === 1 ? '' : 's'} selected
         </span>
 
         <button
           onClick={handleSync}
           disabled={syncing || selectedCount === 0}
-          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors ml-auto"
+          className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors ml-auto"
         >
           {syncing ? (
             <Loader2 className="w-4 h-4 animate-spin" />
@@ -93,7 +93,7 @@ export function ExportPanel({
         <a
           href={api.export.apkgUrl(generationId)}
           onClick={guardEmpty}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
         >
           <Download className="w-4 h-4" />
           .apkg
@@ -101,7 +101,7 @@ export function ExportPanel({
         <a
           href={api.export.csvUrl(generationId)}
           onClick={guardEmpty}
-          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600"
         >
           <FileDown className="w-4 h-4" />
           .csv
@@ -109,13 +109,13 @@ export function ExportPanel({
       </div>
 
       {lastResult && (
-        <p className="flex items-center gap-1.5 text-xs text-green-600">
+        <p className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400">
           <CheckCircle2 className="w-3.5 h-3.5" />
           {lastResult}
         </p>
       )}
 
-      <p className="text-xs text-gray-400">
+      <p className="text-xs text-gray-400 dark:text-gray-500">
         Adding to Anki needs Anki open with the AnkiConnect add-on. If it fails,
         check the setup steps in Settings.
       </p>

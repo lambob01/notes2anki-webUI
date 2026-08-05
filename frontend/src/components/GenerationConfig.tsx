@@ -37,16 +37,16 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
   const activeProviders = providers.filter((p: any) => p.is_active)
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5">
-      <h3 className="font-semibold text-gray-700">Generation Settings</h3>
+    <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5 dark:bg-gray-800 dark:border-gray-700">
+      <h3 className="font-semibold text-gray-700 dark:text-gray-200">Generation Settings</h3>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">API Provider</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">API Provider</label>
           <select
             value={config.provider_id}
             onChange={(e) => onChange({ ...config, provider_id: e.target.value, model_name: '' })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           >
             <option value="">Select provider...</option>
             {activeProviders.map((p: any) => (
@@ -57,12 +57,12 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
 
         <div>
           <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium text-gray-500">Model</label>
+            <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Model</label>
             {config.provider_id && (
               <button
                 onClick={() => fetchModelsMutation.mutate()}
                 disabled={fetchModelsMutation.isPending}
-                className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1"
+                className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 dark:text-red-400 dark:hover:text-red-300"
               >
                 <RefreshCw className={`w-3 h-3 ${fetchModelsMutation.isPending ? 'animate-spin' : ''}`} />
                 Fetch
@@ -82,11 +82,11 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Card Template</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">Card Template</label>
           <select
             value={config.template_id}
             onChange={(e) => onChange({ ...config, template_id: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           >
             <option value="">Select template...</option>
             {templates.map((t: any) => (
@@ -96,12 +96,12 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
         </div>
 
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Deck Name</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">Deck Name</label>
           <input
             type="text"
             value={config.deck_name}
             onChange={(e) => onChange({ ...config, deck_name: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             placeholder="Default"
           />
         </div>
@@ -109,17 +109,17 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1">Subject Context</label>
+          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">Subject Context</label>
           <input
             type="text"
             value={config.subject_context}
             onChange={(e) => onChange({ ...config, subject_context: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
             placeholder="e.g. Biology 101"
           />
         </div>
         <div className="flex items-end pb-1">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-gray-300">
             <input
               type="checkbox"
               checked={!!config.force}
@@ -132,23 +132,23 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1">
+        <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">
           Custom Prompt (optional)
         </label>
         <textarea
           value={config.custom_prompt}
           onChange={(e) => onChange({ ...config, custom_prompt: e.target.value })}
           rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y"
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
           placeholder="Custom system prompt for the AI..."
         />
       </div>
 
       <details className="text-sm">
-        <summary className="text-gray-500 cursor-pointer">Advanced</summary>
+        <summary className="text-gray-500 cursor-pointer dark:text-gray-400">Advanced</summary>
         <div className="grid grid-cols-2 gap-4 mt-3">
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">DPI: {config.dpi}</label>
+            <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">DPI: {config.dpi}</label>
             <input
               type="range"
               min={72}
@@ -160,7 +160,7 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1">
+            <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">
               Parallel Workers: {config.max_workers}
             </label>
             <input

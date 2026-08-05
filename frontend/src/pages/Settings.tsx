@@ -97,8 +97,8 @@ function MultiSourcePicker({
         onClick={() => setOpen(!open)}
         className={`w-full flex items-center justify-between gap-2 px-2 py-1 border rounded text-sm ${
           selected.length
-            ? 'border-indigo-300 bg-indigo-50 text-indigo-800'
-            : 'border-gray-200 bg-white text-gray-400'
+            ? 'border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-900/40 dark:text-red-200'
+            : 'border-gray-200 bg-white text-gray-400 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-500'
         }`}
       >
         <span className="truncate">{selected.length ? labels : '— not used —'}</span>
@@ -108,11 +108,11 @@ function MultiSourcePicker({
       {open && (
         <>
           <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-64 overflow-y-auto">
+          <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg p-1.5 max-h-64 overflow-y-auto dark:bg-gray-800 dark:border-gray-700">
             {SOURCES.filter((s) => s.id).map((s) => (
               <label
                 key={s.id}
-                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700"
+                className="flex items-center gap-2 px-2 py-1 rounded hover:bg-gray-50 cursor-pointer text-sm text-gray-700 dark:hover:bg-gray-700 dark:text-gray-300"
               >
                 <input
                   type="checkbox"
@@ -307,40 +307,40 @@ export default function SettingsPage() {
     <div className="space-y-10">
       <div>
         <h1 className="text-2xl font-bold">Settings</h1>
-        <p className="text-gray-500 mt-1">Configure API providers and card templates</p>
+        <p className="text-gray-500 mt-1 dark:text-gray-400">Configure API providers and card templates</p>
       </div>
 
       <AnkiConnectPanel />
 
-      <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+      <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">API Providers</h2>
           <button
             onClick={() => setShowAddProvider(!showAddProvider)}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
           >
             <Plus className="w-4 h-4" /> Add Provider
           </button>
         </div>
 
         {showAddProvider && (
-          <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-4 space-y-3">
+          <div className="border border-red-200 bg-red-50 rounded-lg p-4 space-y-3 dark:border-red-800 dark:bg-red-900/30">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-gray-600">Name</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Name</label>
                 <input
                   value={newProvider.name}
                   onChange={(e) => setNewProvider({ ...newProvider, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   placeholder="My OpenAI"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">Provider</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Provider</label>
                 <select
                   value={newProvider.provider_type}
                   onChange={(e) => setNewProvider({ ...newProvider, provider_type: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                 >
                   {PROVIDER_TYPES.map((t) => (
                     <option key={t.id} value={t.id}>{t.label}</option>
@@ -350,21 +350,21 @@ export default function SettingsPage() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-gray-600">Base URL (optional)</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Base URL (optional)</label>
                 <input
                   value={newProvider.base_url}
                   onChange={(e) => setNewProvider({ ...newProvider, base_url: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   placeholder="Auto-detected from preset"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">API Key</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">API Key</label>
                 <input
                   type="password"
                   value={newProvider.api_key}
                   onChange={(e) => setNewProvider({ ...newProvider, api_key: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   placeholder="sk-..."
                 />
               </div>
@@ -372,14 +372,14 @@ export default function SettingsPage() {
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setShowAddProvider(false)}
-                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg"
+                className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg dark:text-gray-300 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>
               <button
                 onClick={() => createProviderMutation.mutate(newProvider)}
                 disabled={!newProvider.name}
-                className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 Save
               </button>
@@ -389,7 +389,7 @@ export default function SettingsPage() {
 
         <div className="space-y-3">
           {(providers || []).map((p: any) => (
-            <div key={p.id} className="flex items-center gap-4 p-3 border border-gray-100 rounded-lg hover:bg-gray-50">
+            <div key={p.id} className="flex items-center gap-4 p-3 border border-gray-100 rounded-lg hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50">
               <Globe className="w-5 h-5 text-gray-400" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">{p.name}</p>
@@ -402,11 +402,11 @@ export default function SettingsPage() {
                     when SECRET_KEY changed since it was saved. */}
                 <p className="text-xs mt-0.5">
                   {!p.key_set ? (
-                    <span className="text-amber-600">no API key</span>
+                    <span className="text-amber-600 dark:text-amber-400">no API key</span>
                   ) : p.key_hint ? (
-                    <span className="text-green-600">key stored {p.key_hint}</span>
+                    <span className="text-green-600 dark:text-green-400">key stored {p.key_hint}</span>
                   ) : (
-                    <span className="text-red-600">
+                    <span className="text-red-600 dark:text-red-400">
                       key unreadable — SECRET_KEY changed, re-enter it
                     </span>
                   )}
@@ -416,7 +416,7 @@ export default function SettingsPage() {
                 <button
                   onClick={() => testConnection(p)}
                   disabled={testingId === p.id}
-                  className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/30"
                   title="Test connection"
                 >
                   {testingId === p.id ? (
@@ -427,7 +427,7 @@ export default function SettingsPage() {
                 </button>
                 <button
                   onClick={() => deleteProviderMutation.mutate(p.id)}
-                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/30"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -435,60 +435,60 @@ export default function SettingsPage() {
             </div>
           ))}
           {(!providers || providers.length === 0) && (
-            <p className="text-sm text-gray-400 text-center py-4">
+            <p className="text-sm text-gray-400 text-center py-4 dark:text-gray-500">
               No providers configured. Add one to get started.
             </p>
           )}
         </div>
       </section>
 
-      <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+      <section className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 dark:bg-gray-800 dark:border-gray-700">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-lg">Card Templates</h2>
           <button
             onClick={openTemplateForm}
-            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
+            className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700"
           >
             <Plus className="w-4 h-4" /> Add Template
           </button>
         </div>
 
         {showTemplateForm && (
-          <div className="border border-indigo-200 bg-indigo-50 rounded-lg p-4 space-y-3">
+          <div className="border border-red-200 bg-red-50 rounded-lg p-4 space-y-3 dark:border-red-800 dark:bg-red-900/30">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-indigo-700">
+              <p className="text-sm font-medium text-red-700 dark:text-red-300">
                 {editingId ? 'Edit template' : 'New template'}
               </p>
-              <button onClick={closeTemplateForm} className="p-1 text-gray-400 hover:text-gray-600 rounded">
+              <button onClick={closeTemplateForm} className="p-1 text-gray-400 hover:text-gray-600 rounded dark:hover:text-gray-300">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs font-medium text-gray-600">Name</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Name</label>
                 <input
                   value={newTemplate.name}
                   onChange={(e) => setNewTemplate({ ...newTemplate, name: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                   placeholder="My Note Type"
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600">Anki Note Type</label>
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">Anki Note Type</label>
                 <div className="flex gap-2">
                   <input
                     list="anki-note-types"
                     value={newTemplate.note_type}
                     onChange={(e) => setNewTemplate({ ...newTemplate, note_type: e.target.value })}
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                     placeholder="Type your Anki note type name..."
                   />
                   <button
                     onClick={loadNoteTypes}
                     disabled={loadingNoteTypes}
                     title="Load note types from Anki"
-                    className="px-2 py-2 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50"
+                    className="px-2 py-2 border border-gray-300 rounded-lg text-gray-500 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
                   >
                     {loadingNoteTypes ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -509,7 +509,7 @@ export default function SettingsPage() {
               <button
                 onClick={detectFields}
                 disabled={detectingFields || !newTemplate.note_type.trim()}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="flex items-center gap-2 px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 {detectingFields ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -519,7 +519,7 @@ export default function SettingsPage() {
                 Detect fields from Anki
               </button>
               {newTemplate.ankiFields.length > 0 && (
-                <span className="text-xs text-indigo-600">
+                <span className="text-xs text-red-600 dark:text-red-400">
                   {newTemplate.ankiFields.length} field(s): {newTemplate.ankiFields.join(', ')}
                 </span>
               )}
@@ -527,7 +527,7 @@ export default function SettingsPage() {
 
             {newTemplate.ankiFields.length > 0 ? (
               <div>
-                <label className="text-xs font-medium text-gray-600">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Field mapping — what goes where in your card type
                 </label>
                 <div className="space-y-1.5 mt-1">
@@ -544,7 +544,7 @@ export default function SettingsPage() {
                     }
                     return (
                       <div key={f} className="flex items-center gap-2">
-                        <span className="w-40 text-sm text-gray-700 truncate">{f}</span>
+                        <span className="w-40 text-sm text-gray-700 truncate dark:text-gray-300">{f}</span>
                         <MultiSourcePicker
                           field={f}
                           selected={selected}
@@ -563,7 +563,7 @@ export default function SettingsPage() {
               </div>
             ) : (
               <div>
-                <label className="text-xs font-medium text-gray-600">
+                <label className="text-xs font-medium text-gray-600 dark:text-gray-400">
                   Fields (manual mode — or detect from your Anki note type above)
                 </label>
                 {((Array.isArray(newTemplate.fields) ? newTemplate.fields : []) as any[]).map((f: any, i: number) => (
@@ -575,7 +575,7 @@ export default function SettingsPage() {
                         updated[i] = { ...updated[i], name: e.target.value }
                         setNewTemplate({ ...newTemplate, fields: updated })
                       }}
-                      className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
+                      className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       placeholder="Field name"
                     />
                     <input
@@ -585,10 +585,10 @@ export default function SettingsPage() {
                         updated[i] = { ...updated[i], label: e.target.value }
                         setNewTemplate({ ...newTemplate, fields: updated })
                       }}
-                      className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm"
+                      className="flex-1 px-2 py-1 border border-gray-200 rounded text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
                       placeholder="Label"
                     />
-                    <label className="flex items-center gap-1 text-xs text-gray-500">
+                    <label className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
                       <input
                         type="checkbox"
                         checked={f.visible}
@@ -606,22 +606,22 @@ export default function SettingsPage() {
             )}
 
             <div>
-              <label className="text-xs font-medium text-gray-600">CSS</label>
+              <label className="text-xs font-medium text-gray-600 dark:text-gray-400">CSS</label>
               <textarea
                 value={newTemplate.css}
                 onChange={(e) => setNewTemplate({ ...newTemplate, css: e.target.value })}
                 rows={3}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
               />
             </div>
             <div className="flex gap-2 justify-end">
-              <button onClick={closeTemplateForm} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg">
+              <button onClick={closeTemplateForm} className="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-200 rounded-lg dark:text-gray-300 dark:hover:bg-gray-700">
                 Cancel
               </button>
               <button
                 onClick={saveTemplate}
                 disabled={!newTemplate.name}
-                className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                className="px-3 py-1.5 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50"
               >
                 Save
               </button>
@@ -631,34 +631,34 @@ export default function SettingsPage() {
 
         <div className="space-y-3">
           {(templates || []).map((t: any) => (
-            <div key={t.id} className="flex items-center gap-4 p-3 border border-gray-100 rounded-lg hover:bg-gray-50">
+            <div key={t.id} className="flex items-center gap-4 p-3 border border-gray-100 rounded-lg hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700/50">
               <Server className="w-5 h-5 text-gray-400" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium">
                   {t.name}
-                  {t.is_default && <span className="text-xs text-indigo-500 ml-2">(Default)</span>}
+                  {t.is_default && <span className="text-xs text-red-500 ml-2 dark:text-red-400">(Default)</span>}
                 </p>
                 <p className="text-xs text-gray-400">
                   {t.note_type} &middot; {(t.fields || []).length} fields
-                  {t.mapping && <span className="text-green-600"> &middot; mapped</span>}
+                  {t.mapping && <span className="text-green-600 dark:text-green-400"> &middot; mapped</span>}
                 </p>
               </div>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => editTemplate(t)}
-                  className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/30"
                   title="Edit template"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
-                <button onClick={() => deleteTemplateMutation.mutate(t.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded">
+                <button onClick={() => deleteTemplateMutation.mutate(t.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded dark:hover:bg-red-900/30">
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
             </div>
           ))}
           {(!templates || templates.length === 0) && (
-            <p className="text-sm text-gray-400 text-center py-4">No card templates. The defaults will be used.</p>
+            <p className="text-sm text-gray-400 text-center py-4 dark:text-gray-500">No card templates. The defaults will be used.</p>
           )}
         </div>
       </section>

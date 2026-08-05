@@ -5,8 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Notes2Anki</title>
     <meta name="description" content="AI-powered Anki flashcard generator" />
+    <script>
+      // Apply the saved theme before first paint to avoid a light flash (FOUC).
+      // Mirrors the useTheme hook: explicit localStorage wins, else system pref.
+      try {
+        var stored = localStorage.getItem('notes2anki:theme')
+        var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (dark) document.documentElement.classList.add('dark')
+      } catch (e) {}
+    </script>
   </head>
-  <body class="bg-gray-50 text-gray-900 min-h-screen">
+  <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

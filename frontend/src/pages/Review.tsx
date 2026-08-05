@@ -34,7 +34,7 @@ export default function ReviewPage() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-3 text-gray-500">
+      <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
         <Loader2 className="w-5 h-5 animate-spin" />
         Loading generation...
       </div>
@@ -42,35 +42,35 @@ export default function ReviewPage() {
   }
 
   if (!gen) {
-    return <p className="text-gray-500">Generation not found.</p>
+    return <p className="text-gray-500 dark:text-gray-400">Generation not found.</p>
   }
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/" className="text-gray-400 hover:text-gray-600">
+          <Link to="/" className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
             <ArrowLeft className="w-5 h-5" />
           </Link>
           <div>
             <h1 className="text-xl font-bold">{gen.title}</h1>
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               {gen.deck_name} &middot; {gen.model_name}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
           {gen.status === 'running' && (
-            <span className="flex items-center gap-1 text-sm text-indigo-600">
+            <span className="flex items-center gap-1 text-sm text-red-600 dark:text-red-400">
               <Loader2 className="w-4 h-4 animate-spin" />
               Generating...
             </span>
           )}
           {gen.status === 'completed' && (
-            <span className="text-sm text-green-600 font-medium">Complete &middot; {gen.cards.length} cards</span>
+            <span className="text-sm text-green-600 font-medium dark:text-green-400">Complete &middot; {gen.cards.length} cards</span>
           )}
           {gen.status === 'failed' && (
-            <span className="text-sm text-red-600">
+            <span className="text-sm text-red-600 dark:text-red-400">
               Failed: {gen.error_message}
             </span>
           )}
@@ -108,12 +108,12 @@ export default function ReviewPage() {
 
       {gen.cards.length === 0 && gen.status === 'completed' && (
         <div className="text-center py-12 px-6">
-          <p className="text-gray-500">No flashcards were generated from this content.</p>
+          <p className="text-gray-500 dark:text-gray-400">No flashcards were generated from this content.</p>
           {/* A completed-but-empty run usually has a reason (every slide was a
               duplicate, or individual slides errored). Surfacing it here beats
               leaving the user to guess. */}
           {gen.error_message && (
-            <p className="text-sm text-amber-600 mt-3 max-w-xl mx-auto whitespace-pre-line">
+            <p className="text-sm text-amber-600 mt-3 max-w-xl mx-auto whitespace-pre-line dark:text-amber-400">
               {gen.error_message.trim()}
             </p>
           )}

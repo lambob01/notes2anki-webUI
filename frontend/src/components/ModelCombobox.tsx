@@ -114,32 +114,32 @@ export function ModelCombobox({
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
         className={clsx(
-          'w-full flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-left transition-colors',
+          'w-full flex items-center gap-2 px-3 py-2 border rounded-lg text-sm text-left',
           disabled
-            ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed'
-            : 'bg-white border-gray-300 hover:border-gray-400'
+            ? 'bg-gray-50 border-gray-200 text-gray-400 cursor-not-allowed dark:bg-gray-700 dark:border-gray-600 dark:text-gray-500'
+            : 'bg-white border-gray-300 hover:border-gray-400 dark:bg-gray-800 dark:border-gray-600 dark:hover:border-gray-500'
         )}
       >
-        <span className={clsx('flex-1 truncate', !value && 'text-gray-400')}>
+        <span className={clsx('flex-1 truncate', !value && 'text-gray-400 dark:text-gray-500')}>
           {value || 'Select model...'}
         </span>
         {selected?.supports_vision && (
-          <Eye className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+          <Eye className="w-3.5 h-3.5 text-red-400 shrink-0" />
         )}
-        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+        <ChevronDown className="w-4 h-4 text-gray-400 shrink-0 dark:text-gray-500" />
       </button>
 
       {open && !disabled && (
-        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100">
-            <Search className="w-4 h-4 text-gray-400 shrink-0" />
+        <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden dark:bg-gray-800 dark:border-gray-700">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-100 dark:border-gray-700">
+            <Search className="w-4 h-4 text-gray-400 shrink-0 dark:text-gray-500" />
             <input
               ref={inputRef}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={onKeyDown}
               placeholder={placeholder}
-              className="flex-1 text-sm outline-none placeholder:text-gray-400"
+              className="flex-1 text-sm outline-none placeholder:text-gray-400 dark:bg-transparent dark:text-gray-100 dark:placeholder:text-gray-500"
             />
           </div>
 
@@ -152,27 +152,27 @@ export function ModelCombobox({
                 onClick={() => commit(m.model_id, false)}
                 className={clsx(
                   'w-full flex items-center gap-2 px-3 py-2 text-sm text-left',
-                  i === highlight ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                  i === highlight ? 'bg-red-50 dark:bg-red-900/40' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                 )}
               >
                 <span className="flex-1 truncate">
                   {m.display_name && m.display_name !== m.model_id ? (
                     <>
                       {m.display_name}
-                      <span className="text-gray-400 ml-1.5 text-xs">{m.model_id}</span>
+                      <span className="text-gray-400 ml-1.5 text-xs dark:text-gray-500">{m.model_id}</span>
                     </>
                   ) : (
                     m.model_id
                   )}
                 </span>
                 {m.supports_vision && (
-                  <Eye className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+                  <Eye className="w-3.5 h-3.5 text-red-400 shrink-0" />
                 )}
                 {m.is_custom && (
-                  <span className="text-[10px] text-gray-400 shrink-0">custom</span>
+                  <span className="text-[10px] text-gray-400 shrink-0 dark:text-gray-500">custom</span>
                 )}
                 {m.model_id === value && (
-                  <Check className="w-4 h-4 text-indigo-600 shrink-0" />
+                  <Check className="w-4 h-4 text-red-600 shrink-0" />
                 )}
               </button>
             ))}
@@ -183,11 +183,11 @@ export function ModelCombobox({
                 onMouseEnter={() => setHighlight(filtered.length)}
                 onClick={() => commit(trimmed, true)}
                 className={clsx(
-                  'w-full flex items-center gap-2 px-3 py-2 text-sm text-left border-t border-gray-100',
-                  highlight === filtered.length ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                  'w-full flex items-center gap-2 px-3 py-2 text-sm text-left border-t border-gray-100 dark:border-gray-700',
+                  highlight === filtered.length ? 'bg-red-50 dark:bg-red-900/40' : 'hover:bg-gray-50 dark:hover:bg-gray-700'
                 )}
               >
-                <Plus className="w-4 h-4 text-indigo-600 shrink-0" />
+                <Plus className="w-4 h-4 text-red-600 shrink-0" />
                 <span className="truncate">
                   Use <span className="font-medium">{trimmed}</span>
                 </span>
@@ -195,7 +195,7 @@ export function ModelCombobox({
             )}
 
             {filtered.length === 0 && !canAddCustom && (
-              <p className="px-3 py-6 text-sm text-gray-400 text-center">
+              <p className="px-3 py-6 text-sm text-gray-400 text-center dark:text-gray-500">
                 No models found. Fetch them in Settings, or type a name to use it
                 directly.
               </p>
