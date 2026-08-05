@@ -81,6 +81,18 @@ def update_provider(provider_id: str, data: ProviderUpdate, db: Session = Depend
     provider = db.query(Provider).filter(Provider.id == provider_id).first()
     if not provider:
         raise HTTPException(404, "Provider not found")
+    # Repointing base_url on a provider that stores a key would let a caller
+    # send that stored credential to a host they control via /test or /models.
+    # A keyed provider keeps the URL it was created with; keyless local
+    # runtimes (Ollama, LM Studio) are still freely repointable. The raw
+    # ciphertext column, not the decrypting `api_key` property, is the guard:
+    # even an undecryptable key (SECRET_KEY changed) must not move hosts.
+    if provider.api_key_enc and data.base_url is not None and data.base_url != provider.base_url:
+        raise HTTPException(
+            400,
+            "Cannot change the base URL of a provider that stores an API key. "
+            "Delete and recreate the provider to point it elsewhere.",
+        )
     for field, value in data.model_dump(exclude_unset=True).items():
         # The UI can no longer display the stored key, so its input renders
         # empty. Treat an empty submission as "leave the key alone" rather

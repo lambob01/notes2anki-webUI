@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import re
 import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -29,6 +30,15 @@ SUPPORTED_EXTENSIONS = {
     ".txt", ".md", ".pdf", ".docx", ".pptx",
     ".png", ".jpg", ".jpeg", ".bmp", ".gif", ".webp",
 }
+
+# Uploads are stored as "{sha256(content)[:16]}{ext}" (see routers/notes.py),
+# so a generation's source_filename is safe to join into UPLOAD_DIR only when
+# it matches exactly that shape. Anything else - `../..`, arbitrary names,
+# absolute paths - is a path-traversal attempt against local files.
+_UPLOAD_NAME_RE = re.compile(
+    r"[0-9a-f]{16}\.(?:txt|md|pdf|docx|pptx|png|jpg|jpeg|bmp|gif|webp)",
+    re.IGNORECASE,
+)
 
 
 def _file_digest(filepath: str) -> str:
@@ -426,6 +436,11 @@ def generate_from_file(
 ):
     if not data.source_filename:
         raise HTTPException(400, "source_filename is required")
+    # Only names the upload endpoint produces may be used as paths. This is
+    # what stops a `../../../etc/hosts` source_filename from being joined into
+    # UPLOAD_DIR and read by the generation pipeline.
+    if not _UPLOAD_NAME_RE.fullmatch(data.source_filename):
+        raise HTTPException(400, "source_filename is not a stored upload")
     provider = db.query(Provider).filter(Provider.id == data.provider_id).first()
     if not provider:
         raise HTTPException(404, "Provider not found")
