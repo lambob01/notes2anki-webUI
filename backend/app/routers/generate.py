@@ -1,28 +1,36 @@
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import logging
 import os
 import re
 import shutil
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import FileResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.config import EXPORT_DIR, SLIDES_DIR, UPLOAD_DIR
 from app.database import get_db
-from app.models import Provider, CardTemplate, Generation, Card, ProcessedSlide
-from app.schemas import GenerateRequest, GenerationSchema
-from app.config import UPLOAD_DIR, SLIDES_DIR, EXPORT_DIR
-from app.services.document_reader import DocumentReader
 from app.llm.base import FatalProviderError, ProviderConfig
+from app.models import Card, CardTemplate, Generation, ProcessedSlide, Provider
+from app.schemas import (
+    GenerateRequest,
+    GenerationSchema,
+    GenerationStatusSchema,
+    GenerationSummarySchema,
+)
 from app.services.ai_generator import (
+    AiError,
     generate_cards_text,
     generate_cards_vision,
     generate_global_context,
-    AiError,
 )
+from app.services.document_reader import DocumentReader
 
 router = APIRouter()
 
@@ -71,44 +79,39 @@ def _mark_slide_processed(db: Session, file_digest: str, slide_index: int, sourc
         db.commit()
 
 
-# A live job commits progress (bumping `updated_at`) at least once per slide,
-# and a slide's worst case is a full 3-attempt retry cycle. Anything quiet
-# longer than this has no live task behind it.
-STALE_RUN_MINUTES = 10
+# ---------------------------------------------------------------------------
+# Cancellation
+#
+# A generation runs in a background task thread while the cancel endpoint runs
+# in a request thread, so the "please stop" signal is a module-level registry
+# behind a lock rather than a flag on the ORM row (the task owns that row and
+# is committing to it constantly; two writers to one row is how the old
+# fan-out concurrency bug happened). The endpoint also marks the row cancelled
+# directly, which resolves a job whose task is already dead. The task, seeing
+# the flag, will not overwrite it with `completed`.
+# ---------------------------------------------------------------------------
+
+_cancelled: set[str] = set()
+_cancel_lock = threading.Lock()
 
 
-def _reap_stale_running(db: Session) -> None:
-    """Fail a run whose background task has silently died.
+def _request_cancel(generation_id: str) -> None:
+    with _cancel_lock:
+        _cancelled.add(generation_id)
 
-    A background task that dies without raising (killed thread, interpreter
-    quirk) leaves its row `running` forever, and the review page polls a
-    phantom "Generating..." that never resolves. Any `running`/`pending` row
-    untouched for STALE_RUN_MINUTES has no live task - the task updates the
-    row at least once per slide - so mark it failed and let the user re-run.
-    """
-    import datetime as dt
 
-    cutoff = dt.datetime.utcnow() - dt.timedelta(minutes=STALE_RUN_MINUTES)
-    stale = (
-        db.query(Generation)
-        .filter(
-            Generation.status.in_(["running", "pending"]),
-            Generation.updated_at < cutoff,
-        )
-        .all()
-    )
-    if not stale:
-        return
-    for gen in stale:
-        gen.status = "failed"
-        gen.phase = "failed"
-        gen.completed_at = dt.datetime.utcnow()
-        gen.error_message = (
-            f"Generation stopped unexpectedly - no progress for "
-            f"{STALE_RUN_MINUTES} minutes. Run it again; slides already "
-            "processed are skipped."
-        )
-    db.commit()
+def _is_cancelled(generation_id: str) -> bool:
+    with _cancel_lock:
+        return generation_id in _cancelled
+
+
+def _clear_cancel(generation_id: str) -> None:
+    with _cancel_lock:
+        _cancelled.discard(generation_id)
+
+
+class GenerationCancelled(Exception):
+    """Raised internally when the user stops a run; a terminal status, not an error."""
 
 
 def _persist_json_mode_tier(db: Session, provider: Provider, cfg: ProviderConfig) -> None:
@@ -137,7 +140,6 @@ def _persist_json_mode_tier(db: Session, provider: Provider, cfg: ProviderConfig
 
 def _run_generation(generation_id: str, force: bool = False):
     from app.database import SessionLocal
-    import datetime as dt
     db = SessionLocal()
     # Bound before the try so the failure handler can distinguish "never loaded
     # the row" from "the run itself failed". Reading an unbound `gen` in the
@@ -190,6 +192,12 @@ def _run_generation(generation_id: str, force: bool = False):
         finally:
             _persist_json_mode_tier(db, provider, provider_cfg)
 
+        # A cancellation during a single-block text run (one LLM call, no slide
+        # loop to notice) lands here after the call returns. The file path
+        # raises GenerationCancelled from inside _process_file instead.
+        if _is_cancelled(generation_id):
+            raise GenerationCancelled()
+
         gen.status = "completed"
         # Preserve a phase the processor set deliberately (e.g. the
         # all-duplicates skip), which explains a zero-card result.
@@ -197,6 +205,26 @@ def _run_generation(generation_id: str, force: bool = False):
             gen.phase = "done"
         gen.completed_at = dt.datetime.utcnow()
         db.commit()
+    except GenerationCancelled:
+        logger = logging.getLogger(__name__)
+        logger.info("Generation %s cancelled", generation_id)
+        if gen is not None:
+            gen.status = "cancelled"
+            gen.phase = "cancelled"
+            gen.completed_at = dt.datetime.utcnow()
+            gen.error_message = (
+                f"Cancelled by you after {gen.completed_slides or 0} of "
+                f"{gen.total_slides or 0} slide(s). Cards generated so far are "
+                "kept; run it again to finish the rest."
+            )
+            try:
+                db.commit()
+            except Exception:
+                logger.exception(
+                    "Generation %s cancelled, but marking it cancelled also "
+                    "failed", generation_id,
+                )
+                db.rollback()
     except Exception as e:
         # This handler is the only thing standing between a crashed run and a
         # row that says `running` forever, so it must not raise. Two ways it
@@ -204,7 +232,7 @@ def _run_generation(generation_id: str, force: bool = False):
         # below failing on a Session already broken by whatever killed the run
         # (see the 'prepared state' failure in TODO item 1). Either escapes a
         # BackgroundTasks worker, where nothing catches it, and the run then
-        # hangs in the UI until _reap_stale_running gets to it minutes later.
+        # hangs in the UI until the stale reaper gets to it minutes later.
         logger = logging.getLogger(__name__)
         logger.exception("Generation %s failed", generation_id)
         try:
@@ -216,10 +244,11 @@ def _run_generation(generation_id: str, force: bool = False):
         except Exception:
             logger.exception(
                 "Generation %s failed, and marking it failed also failed; "
-                "leaving it for _reap_stale_running", generation_id,
+                "leaving it for the stale reaper", generation_id,
             )
             db.rollback()
     finally:
+        _clear_cancel(generation_id)
         db.close()
 
 
@@ -345,6 +374,16 @@ def _process_file(
         for future in as_completed(futures):
             slide = futures[future]
 
+            # A cancellation (user pressed Cancel) and a fatal provider error
+            # share a shape: every remaining slide would repeat the same
+            # outcome, so drain without issuing more work. In-flight LLM calls
+            # on the worker threads finish - they cannot be interrupted without
+            # tearing down the pool - but their results are discarded, so a
+            # cancelled run is exactly the slides counted so far.
+            if _is_cancelled(gen.id):
+                future.cancel()
+                continue
+
             # Once one slide hits an unrecoverable provider error (bad key,
             # unbillable model, no quota), every remaining slide will hit the
             # same one. Drain without issuing more work.
@@ -384,6 +423,9 @@ def _process_file(
                 # at less than 100% on a partially failed run.
                 gen.completed_slides = (gen.completed_slides or 0) + 1
                 db.commit()
+
+    if _is_cancelled(gen.id):
+        raise GenerationCancelled()
 
     if fatal is not None:
         # Surface the provider's own words: it names the model and the reason,
@@ -501,19 +543,74 @@ def _looks_like_png(path: str) -> bool:
         return f.read(8) == b"\x89PNG\r\n\x1a\n"
 
 
-@router.get("/{generation_id}", response_model=GenerationSchema)
-def get_generation(generation_id: str, db: Session = Depends(get_db)):
-    _reap_stale_running(db)
+@router.get("/{generation_id}/status", response_model=GenerationStatusSchema)
+def get_generation_status(generation_id: str, db: Session = Depends(get_db)):
+    """Slim snapshot for the review page's 1s progress poll.
+
+    The review page used to poll the full `GenerationSchema`, and pydantic
+    serialized every card on every tick. This carries only what the progress
+    UI needs; the full generation (with cards) is fetched once the run is
+    terminal.
+    """
     gen = db.query(Generation).filter(Generation.id == generation_id).first()
     if not gen:
         raise HTTPException(404, "Generation not found")
     return gen
 
 
-@router.get("", response_model=list[GenerationSchema])
+@router.get("/{generation_id}", response_model=GenerationSchema)
+def get_generation(generation_id: str, db: Session = Depends(get_db)):
+    gen = db.query(Generation).filter(Generation.id == generation_id).first()
+    if not gen:
+        raise HTTPException(404, "Generation not found")
+    return gen
+
+
+@router.get("", response_model=list[GenerationSummarySchema])
 def list_generations(db: Session = Depends(get_db)):
-    _reap_stale_running(db)
-    return db.query(Generation).order_by(Generation.created_at.desc()).all()
+    gens = db.query(Generation).order_by(Generation.created_at.desc()).all()
+    if gens:
+        # One grouped query gives every history row an accurate live card count
+        # (cards_generated drifts when the user edits/deletes cards) without
+        # shipping the cards themselves - the old GenerationSchema did exactly
+        # that, loading the whole card table for rows that show none of them.
+        counts = dict(
+            db.query(Card.generation_id, func.count(Card.id))
+            .filter(Card.generation_id.in_([g.id for g in gens]))
+            .group_by(Card.generation_id)
+            .all()
+        )
+        for g in gens:
+            g.card_count = counts.get(g.id, 0)
+    return gens
+
+
+@router.post("/{generation_id}/cancel")
+def cancel_generation(generation_id: str, db: Session = Depends(get_db)):
+    """Stop a running generation; partial cards are kept.
+
+    Refused when there is nothing to cancel. The row is marked `cancelled`
+    immediately as well as flagging the task, so a job whose background task
+    is already dead resolves right away instead of waiting for the stale
+    reaper; the live task, seeing the flag, will not overwrite the status with
+    `completed` when it drains.
+    """
+    gen = db.query(Generation).filter(Generation.id == generation_id).first()
+    if not gen:
+        raise HTTPException(404, "Generation not found")
+    if gen.status not in ("running", "pending"):
+        raise HTTPException(409, "Generation is not running or pending")
+
+    _request_cancel(generation_id)
+    gen.status = "cancelled"
+    gen.phase = "cancelled"
+    gen.completed_at = dt.datetime.utcnow()
+    gen.error_message = (
+        "Cancelled by you. Cards generated so far are kept; run it again to "
+        "finish the rest."
+    )
+    db.commit()
+    return {"ok": True}
 
 
 @router.delete("")

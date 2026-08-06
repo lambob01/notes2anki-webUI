@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import CardTemplate
-from app.schemas import CardTemplateSchema, CardTemplateCreate, CardTemplateUpdate
+from app.schemas import CardTemplateCreate, CardTemplateSchema, CardTemplateUpdate
 
 router = APIRouter()
 

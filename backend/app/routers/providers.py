@@ -5,17 +5,18 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.llm.base import AiError
+
 # Single source of truth for presets and adapter routing - notably Gemini's
 # base_url points at its OpenAI-compatible surface, so it needs no adapter.
 from app.llm.registry import PROVIDER_PRESETS, build_client
 from app.models import Provider, ProviderModel
 from app.schemas import (
-    ProviderSchema,
-    ProviderCreate,
-    ProviderUpdate,
-    ProviderModelSchema,
-    TestProviderRequest,
     CustomModelCreate,
+    ProviderCreate,
+    ProviderModelSchema,
+    ProviderSchema,
+    ProviderUpdate,
+    TestProviderRequest,
 )
 
 router = APIRouter()

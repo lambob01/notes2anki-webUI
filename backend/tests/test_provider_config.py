@@ -15,7 +15,7 @@ values and never touches the database again.
 import threading
 
 from app.database import SessionLocal
-from app.llm.base import ProviderConfig, TIER_JSON_OBJECT, TIER_PROMPT_ONLY
+from app.llm.base import TIER_JSON_OBJECT, TIER_PROMPT_ONLY, ProviderConfig
 from app.models import Provider
 
 

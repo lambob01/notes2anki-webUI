@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api } from '@/lib/api'
-import { Clock, CheckCircle, XCircle, Loader2, Trash2 } from 'lucide-react'
+import { Clock, CheckCircle, XCircle, Loader2, Trash2, Ban } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 export default function HistoryPage() {
@@ -80,13 +80,14 @@ export default function HistoryPage() {
               <Link to={`/review/${g.id}`} className="flex flex-1 items-center gap-4">
                 {g.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-500" />}
                 {g.status === 'failed' && <XCircle className="w-5 h-5 text-red-500" />}
+                {g.status === 'cancelled' && <Ban className="w-5 h-5 text-amber-500" />}
                 {g.status === 'running' && <Loader2 className="w-5 h-5 text-red-500 animate-spin" />}
                 {g.status === 'pending' && <Clock className="w-5 h-5 text-gray-400" />}
 
                 <div className="flex-1">
                   <p className="text-sm font-medium">{g.title}</p>
                   <p className="text-xs text-gray-400">
-                    {g.model_name} &middot; {g.deck_name} &middot; {g.cards?.length || 0} cards
+                    {g.model_name} &middot; {g.deck_name} &middot; {g.card_count ?? g.cards_generated ?? 0} cards
                   </p>
                 </div>
 
@@ -97,6 +98,7 @@ export default function HistoryPage() {
                 <span className={`text-xs px-2 py-1 rounded-full font-medium ${
                   g.status === 'completed' ? 'bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
                   g.status === 'failed' ? 'bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
+                  g.status === 'cancelled' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
                   g.status === 'running' ? 'bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
                   'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
                 }`}>

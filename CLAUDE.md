@@ -90,7 +90,7 @@ Schema changes: `Base.metadata.create_all` + `ensure_columns()` (an additive `AL
 
 ### Crash/liveness recovery
 
-Background tasks die with the process, so a `running` row would otherwise spin forever in the UI. Two guards: `main.py` startup marks all `running`/`pending` generations failed; `_reap_stale_running` (called on every generation GET) fails rows untouched for `STALE_RUN_MINUTES`.
+Background tasks die with the process, so a `running` row would otherwise spin forever in the UI. Two guards: `main.py` startup marks all `running`/`pending` generations failed; a periodic lifespan task (`app/services/reaper.py`, every 60s) fails rows untouched for `STALE_RUN_MINUTES`. Users can also stop a run with `POST /api/generate/{id}/cancel` — it marks the row `cancelled` (a terminal status) and drains the fan-out at the next slide boundary, keeping cards generated so far.
 
 ### Secrets
 

@@ -51,9 +51,14 @@ export const api = {
     start: (data: any) => request<any>('/api/generate', { method: 'POST', body: JSON.stringify(data) }),
     fromFile: (data: any) => request<any>('/api/generate/from-file', { method: 'POST', body: JSON.stringify(data) }),
     get: (id: string) => request<any>(`/api/generate/${id}`),
+    // Slim progress snapshot for the review page's poll - the full generation
+    // (with cards) is fetched once the run is terminal. Polling the old
+    // `get` serialized every card on every tick.
+    status: (id: string) => request<any>(`/api/generate/${id}/status`),
     list: () => request<any[]>('/api/generate'),
     delete: (id: string) => request<any>(`/api/generate/${id}`, { method: 'DELETE' }),
     clear: () => request<any>('/api/generate', { method: 'DELETE' }),
+    cancel: (id: string) => request<any>(`/api/generate/${id}/cancel`, { method: 'POST' }),
     // The rendered image of the slide a card was generated from (null
     // slide_index on text generations; may 404 for old jobs).
     slideUrl: (genId: string, slideIndex: number) =>

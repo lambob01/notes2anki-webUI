@@ -45,6 +45,7 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
       libglib2.0-0 \
       fonts-dejavu-core \
+      util-linux \
     && if [ "$WITH_LIBREOFFICE" = "true" ]; then \
          apt-get install -y --no-install-recommends libreoffice-impress; \
        fi \

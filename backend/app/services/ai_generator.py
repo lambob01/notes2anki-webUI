@@ -7,7 +7,9 @@ import time
 from typing import Any
 
 from app.llm.base import (
-    AiError as _LlmError,
+    TIER_JSON_OBJECT,
+    TIER_PROMPT_ONLY,
+    TIER_SCHEMA,
     BadRequest,
     FatalProviderError,
     ProviderConfig,
@@ -15,12 +17,11 @@ from app.llm.base import (
     image_part,
     next_tier,
     text_part,
-    TIER_SCHEMA,
-    TIER_JSON_OBJECT,
-    TIER_PROMPT_ONLY,
+)
+from app.llm.base import (
+    AiError as _LlmError,
 )
 from app.llm.registry import build_client
-
 
 # Long lectures are capped before the whole-document syllabus pass, so a huge
 # deck cannot blow the model's input window.
@@ -312,7 +313,7 @@ def _normalize_card_fields(cards: list[dict], template_fields: list[dict] | None
     and in Anki (delimiters canonicalized to \\(...\\) / \\[...\\]); the
     "formula" field additionally gets wrapped in a single display block.
     """
-    from app.services.latex import normalize_latex, format_formula
+    from app.services.latex import format_formula, normalize_latex
 
     names = _field_names(template_fields) or []
     normalized = []

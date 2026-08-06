@@ -65,13 +65,25 @@ Mark an item `[x]` only once it has been verified, not just written.
 
 ## High
 
-- [ ] **3. Every generation response ships every card.**
+- [x] **3. Every generation response ships every card.**
   `schemas/__init__.py:176` puts `cards` on `GenerationSchema`, used by both
   `GET /api/generate/{id}` and `GET /api/generate`. Review polls the former
   every 1000ms with `refetchIntervalInBackground` (`Review.tsx:22-30`);
   History (`History.tsx:9`) pulls every card of every generation to render
   rows that show none of them. *Fix:* drop `cards` from the list response and
   add a slim status endpoint for the poll (or land SSE, `PLAN.md` step 5).
+
+  *Fixed with the slim-endpoint half of that choice* (SSE stays `PLAN.md`
+  step 5). `GET /api/generate` now returns `GenerationSummarySchema` — no
+  `cards`, plus a `card_count` from one grouped COUNT so History's live count
+  survives (and stays accurate after manual card edits). The 1s poll moved to
+  `GET /api/generate/{id}/status` (`GenerationStatusSchema`: header fields +
+  progress only). Review fetches the full generation once the run is terminal,
+  so mid-run ticks serialize one row instead of every card. `History.tsx`
+  renders `card_count`; the detail GET keeps `cards` for the review grid.
+  Covered by `tests/test_generation_summary.py`. The one cost: cards no longer
+  stream into the review page live during a run — the progress bar covers it,
+  and live streaming is what SSE is for.
 
 - [x] **4. No index on `cards.generation_id`.** A FK creates none in SQLite —
   verified against the dev DB, only autoindexes exist. Every card fetch,
@@ -157,6 +169,9 @@ Mark an item `[x]` only once it has been verified, not just written.
   LLM calls, "localhost" means *the user's own machine*, which is both correct
   and harmless. Don't spend effort patching it server-side first.
 
+  *Re-visited in the item-18 pass and left as-is* — still `[~]`. The mitigation
+  reasoning stands unchanged, and the client-side move remains the real fix.
+
 ## Medium
 
 - [x] **8. `except Exception` can raise `NameError`.** `generate.py:151-155`
@@ -199,18 +214,30 @@ Mark an item `[x]` only once it has been verified, not just written.
   `ChemEng` note type exported `['prompt','answer','formula']` where it should
   have been `['Front','Back']`. Covered by `tests/test_export_csv.py`.
 
-- [ ] **10. `_reap_stale_running` runs on every GET** (`generate.py:433,442`),
+- [x] **10. `_reap_stale_running` runs on every GET** (`generate.py:433,442`),
   so the 1s poll issues a scan plus a commit whenever it finds anything.
   Belongs on a periodic task, not the read path.
 
-- [~] **11. Unbounded upload into memory.** `notes.py:30` does
+  *Fixed.* The sweep moved to `app/services/reaper.py`, driven by an asyncio
+  task started from `main.py`'s lifespan that runs every 60s (in
+  `asyncio.to_thread`, its own Session, cancelled on shutdown). Both inline
+  calls are gone, so a GET is a pure read. A dead task's row now resolves
+  within the reaper interval instead of on the next request, which the read
+  path never guarantees anyway — the old inline call still missed it if no
+  request arrived. The read-path tests still pass unmodified.
+
+- [x] **11. Unbounded upload into memory.** `notes.py:30` does
   `await file.read()` with no size cap, then hashes the same content twice
   (lines 31, 45). Also uses `SessionLocal` directly instead of
   `Depends(get_db)`, and returns the server-side `filepath` to the browser.
 
-  The replacement path is already correct: `/api/render` streams to disk with a
-  `MAX_UPLOAD_MB` cap. `notes.py` dies with the server-side generation flow, so
-  fix it only if that flow outlives expectations.
+  *Fixed, because `notes.py` is the live upload path* the Dashboard still
+  uses — the client-side move isn't built, so "dies with the server-side flow"
+  was not true yet. Mirrors the `/api/render` hardening: streams to disk with
+  a `MAX_UPLOAD_MB` cap (413 mid-stream), one pass yields both the stored-name
+  and dedup digests, `Depends(get_db)`, and `filepath` is gone (the frontend
+  never read it). Oversized uploads leave nothing behind — the temp file is
+  unlinked and never renamed. Covered by `tests/test_notes_upload.py`.
 
 - [x] **12. `Dockerfile:42` installs `libgl1-mesa-glx`,** removed in Debian 12
   — and `python:3.12-slim` is bookworm. Unverified (no Docker daemon
@@ -232,10 +259,17 @@ Mark an item `[x]` only once it has been verified, not just written.
   that would have failed it are now fixed and the pip half is verified
   directly.
 
-- [ ] **13. `docker-entrypoint.sh:11`: `exec su app -c "$*"`** flattens argv
+- [x] **13. `docker-entrypoint.sh:11`: `exec su app -c "$*"`** flattens argv
   into a string and re-parses it through a shell, so any argument containing a
   space breaks. `su` also doesn't forward SIGTERM, so `docker stop` waits the
   full timeout. `gosu`/`setpriv` with `"$@"` fixes both.
+
+  *Fixed with `setpriv`* (util-linux, Essential in Debian slim — no new
+  dependency, though `util-linux` is now named in the Dockerfile's apt line as
+  insurance). `exec setpriv --reuid=app --regid=app --init-groups -- env
+  HOME=/home/app "$@"` preserves argv exactly and delivers SIGTERM straight to
+  uvicorn, so `docker stop` is prompt. Syntax-checked with `sh -n`; no Docker
+  daemon here to run the image, same as item 12.
 
 ## Cleanup
 
@@ -305,7 +339,7 @@ Mark an item `[x]` only once it has been verified, not just written.
   template is not duplicated on the second boot. Test-run warnings dropped
   10 → 6.
 
-- [~] **18. Tooling gaps:** no backend linter (ruff would catch the unused
+- [x] **18. Tooling gaps:** no backend linter (ruff would catch the unused
   imports at `generate.py:11-16` and `export.py:4-10`), no frontend lint, no
   route/integration tests, and no way to cancel a running generation.
 
@@ -318,11 +352,29 @@ Mark an item `[x]` only once it has been verified, not just written.
   `# noqa: F401` because that import is load-bearing, not dead. It cleared 12
   unused imports.
 
-  `I` (import sorting) is the obvious next rule — safe and autofixable, but it
-  touches ~17 files, so it wants its own commit.
+  *`I` (import sorting) done too.* Added to `select` and autofixed across ~15
+  files. Safe, and the suite still passes after the reordering.
 
   *Route/integration tests started.* `tests/test_generation_cleanup.py` and
   `tests/test_export_csv.py` drive real endpoints through `TestClient`
   (`DELETE /api/generate/{id}`, `GET /api/export/{id}/csv`), which is the first
-  coverage of the HTTP layer. Frontend lint and generation cancellation are
-  still missing.
+  coverage of the HTTP layer. Now joined by `tests/test_generation_summary.py`
+  (list/status/cancel) and `tests/test_notes_upload.py`.
+
+  *Frontend lint done.* ESLint 9/10 flat config (`frontend/eslint.config.js`)
+  with `@eslint/js`, `typescript-eslint`, `react-hooks`, `react-refresh`;
+  `npm run lint` passes clean. Narrow by design: `any` and unused vars are left
+  to tsc and the codebase's convention, and the new opinionated
+  `react-hooks/set-state-in-effect` rule is off (the two spots it flags are
+  deliberate sync-to-state patterns). `@typescript-eslint/no-unused-vars` off
+  because `tsconfig` deliberately has `noUnusedLocals: false`.
+
+  *Cancellation done.* `POST /api/generate/{id}/cancel` stops a run: a
+  thread-safe cancel registry (a lock-guarded set — not a flag on the ORM row,
+  which the task owns and commits constantly) plus an immediate `cancelled`
+  status so a job whose task is already dead resolves at once. The fan-out
+  drains at the next slide boundary (queued slides cancelled, in-flight LLM
+  calls finish but their results are discarded), and `cancelled` is terminal —
+  delete, clear-all and the reaper all treat it as done. Cards generated so far
+  are kept. Review shows a Cancel button while a run is active; History
+  renders the status. Covered by `tests/test_generation_summary.py`.

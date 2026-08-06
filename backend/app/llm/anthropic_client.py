@@ -14,11 +14,11 @@ from typing import Any
 import httpx
 
 from app.llm.base import (
+    TIER_SCHEMA,
     AiError,
     BadRequest,
     FatalProviderError,
     is_fatal_provider_error,
-    TIER_SCHEMA,
 )
 
 ANTHROPIC_VERSION = "2023-06-01"

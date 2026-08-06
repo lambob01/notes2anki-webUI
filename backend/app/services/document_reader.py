@@ -301,8 +301,9 @@ class DocumentReader:
         blank.
         """
         try:
-            from PIL import Image, ImageDraw
             from io import BytesIO
+
+            from PIL import Image, ImageDraw
 
             if not slide_width or not slide_height:
                 return

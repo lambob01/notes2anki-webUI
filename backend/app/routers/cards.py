@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Card
-from app.schemas import CardSchema, CardUpdate, BatchSelectRequest
+from app.schemas import BatchSelectRequest, CardSchema, CardUpdate
 
 router = APIRouter()
 

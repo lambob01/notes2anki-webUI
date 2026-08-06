@@ -1,5 +1,16 @@
 import datetime
-from sqlalchemy import Column, String, Boolean, DateTime, ForeignKey, Text, Integer, JSON, Float
+
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+)
 from sqlalchemy.orm import relationship
 
 from app import crypto

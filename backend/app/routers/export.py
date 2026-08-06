@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import os
 import csv
 import hashlib
-import io
 import html
+import io
+import os
 import shutil
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -14,9 +14,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
-from app.database import get_db
-from app.models import Generation, Card, CardTemplate
 from app.config import EXPORT_DIR, SLIDES_DIR
+from app.database import get_db
+from app.models import Card, CardTemplate, Generation
 from app.services.latex import clean_latex
 
 router = APIRouter()

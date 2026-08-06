@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import datetime
-from pydantic import BaseModel, field_validator
 from typing import Optional
+
+from pydantic import BaseModel, field_validator
 
 
 class ProviderModelSchema(BaseModel):
@@ -142,20 +143,7 @@ class BatchSelectRequest(BaseModel):
     selected: bool
 
 
-class GenerationSchema(BaseModel):
-    id: str
-    title: Optional[str] = None
-    source_type: str
-    source_filename: Optional[str] = None
-    source_text: Optional[str] = None
-    provider_id: str
-    model_name: str
-    template_id: str
-    deck_name: str = "Default"
-    custom_prompt: Optional[str] = None
-    subject_context: Optional[str] = None
-    status: str = "pending"
-    phase: Optional[str] = None
+class _GenerationProgressMixin(BaseModel):
     # Optional because rows created before progress tracking existed have NULL
     # here; the validator normalizes them so the UI always gets a number.
     total_slides: Optional[int] = 0
@@ -170,6 +158,54 @@ class GenerationSchema(BaseModel):
     @classmethod
     def _null_to_zero(cls, v):
         return 0 if v is None else v
+
+
+class GenerationStatusSchema(_GenerationProgressMixin):
+    """The review page's 1s progress poll: the row without its cards.
+
+    Pulling `GenerationSchema` here made pydantic load every card of the
+    running generation on every tick. This carries only what the header and
+    progress bar show while a job runs.
+    """
+    id: str
+    title: Optional[str] = None
+    deck_name: str = "Default"
+    model_name: str
+    template_id: str
+    status: str = "pending"
+    phase: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime.datetime
+    completed_at: Optional[datetime.datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+class GenerationSummarySchema(GenerationStatusSchema):
+    """A history row: no cards, but an accurate live card count.
+
+    `cards_generated` is the count at generation time and drifts when the user
+    deletes or unselects cards on the review page, so the list endpoint
+    populates `card_count` with a grouped COUNT instead of shipping the cards
+    the way it used to.
+    """
+    card_count: int = 0
+
+
+class GenerationSchema(_GenerationProgressMixin):
+    id: str
+    title: Optional[str] = None
+    source_type: str
+    source_filename: Optional[str] = None
+    source_text: Optional[str] = None
+    provider_id: str
+    model_name: str
+    template_id: str
+    deck_name: str = "Default"
+    custom_prompt: Optional[str] = None
+    subject_context: Optional[str] = None
+    status: str = "pending"
+    phase: Optional[str] = None
     error_message: Optional[str] = None
     created_at: datetime.datetime
     completed_at: Optional[datetime.datetime] = None

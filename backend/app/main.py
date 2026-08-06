@@ -1,3 +1,4 @@
+import asyncio
 import os
 from contextlib import asynccontextmanager
 
@@ -8,13 +9,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app.database import (
     Base,
-    engine,
     SessionLocal,
     encrypt_legacy_api_keys,
+    engine,
     ensure_columns,
     ensure_indexes,
 )
-from app.routers import providers, templates, notes, generate, cards, export, render
+from app.routers import cards, export, generate, notes, providers, render, templates
+from app.services.reaper import stale_reaper_loop
 
 Base.metadata.create_all(bind=engine)
 ensure_columns()
@@ -27,14 +29,24 @@ async def lifespan(app: FastAPI):
 
     Both are sync and run inline, as Starlette ran sync `on_event` handlers -
     they are short, local-SQLite, and must finish before the first request is
-    served. There is no shutdown half; generation background tasks die with the
-    process by design, and `reconcile_orphaned_generations` cleans up after
-    them on the way back up rather than on the way down, because a crash never
-    gets a shutdown hook.
+    served. There is no shutdown half for generation background tasks; they die
+    with the process by design, and `reconcile_orphaned_generations` cleans up
+    after them on the way back up rather than on the way down, because a crash
+    never gets a shutdown hook.
+
+    The stale-run reaper is the one long-lived background task and the one
+    thing that does get cancelled here: it is the app's own loop, not a job,
+    so it must stop when the app does.
     """
     create_default_template()
     reconcile_orphaned_generations()
+    reaper = asyncio.create_task(stale_reaper_loop())
     yield
+    reaper.cancel()
+    try:
+        await reaper
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="notes2anki-webui", version="0.1.0", lifespan=lifespan)

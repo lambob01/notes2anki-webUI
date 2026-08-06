@@ -13,12 +13,12 @@ from typing import Any
 import httpx
 
 from app.llm.base import (
+    TIER_JSON_OBJECT,
+    TIER_SCHEMA,
     AiError,
     BadRequest,
     FatalProviderError,
     is_fatal_provider_error,
-    TIER_SCHEMA,
-    TIER_JSON_OBJECT,
 )
 
 
