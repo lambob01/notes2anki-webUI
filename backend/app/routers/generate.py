@@ -458,7 +458,7 @@ def start_generation(data: GenerateRequest, background_tasks: BackgroundTasks, d
         deck_name=data.deck_name,
         custom_prompt=compose_enrichment(
             data.card_specs, data.custom_prompt, template.fields
-        ),
+        ) or None,
         subject_context=data.subject_context,
         dpi=data.dpi,
         max_workers=data.max_workers,
@@ -514,7 +514,7 @@ def generate_from_file(
         deck_name=data.deck_name,
         custom_prompt=compose_enrichment(
             data.card_specs, data.custom_prompt, template.fields
-        ),
+        ) or None,
         subject_context=data.subject_context,
         dpi=data.dpi,
         max_workers=data.max_workers,

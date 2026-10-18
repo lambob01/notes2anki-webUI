@@ -156,6 +156,7 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
               <button
                 key={preset.key}
                 type="button"
+                aria-pressed={active}
                 onClick={() => toggleCardSpec(preset.key)}
                 className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
                   active
@@ -164,13 +165,13 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
                 }`}
               >
                 <span className="font-medium">{preset.label}</span>
-                <span className="block text-xs text-gray-500 dark:text-gray-400">{preset.hint}</span>
+                <span className={`block text-xs ${active ? '' : 'text-gray-500 dark:text-gray-400'}`}>{preset.hint}</span>
               </button>
             )
           })}
         </div>
         <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
-          Added depth goes in the answer/back field and is marked &quot;(not in slides)&quot;.
+          Added depth goes in the template&apos;s answer/back (or main content) field and is marked &quot;(not in slides)&quot;.
         </p>
       </div>
 

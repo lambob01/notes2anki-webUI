@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 PRESETS: dict[str, str] = {
     "explanations": (
         "Explain the why behind each fact: add a concise explanation of the "
@@ -22,7 +24,12 @@ PRESETS: dict[str, str] = {
 }
 
 _ANSWER_NAMES = {"answer", "back"}
-_ANSWER_LABEL_PARTS = ("answer", "back")
+_ANSWER_LABEL_PARTS = tuple(_ANSWER_NAMES)
+
+
+def _tokens(value: object) -> set[str]:
+    """Lowercase the value and split it on anything non-alphanumeric."""
+    return set(re.findall(r"[a-z0-9]+", str(value).lower()))
 
 
 def resolve_target_field(fields: list[dict] | None) -> str:
@@ -38,9 +45,8 @@ def resolve_target_field(fields: list[dict] | None) -> str:
             return field["name"]
 
     for field in usable:
-        name = str(field["name"]).strip().lower()
-        label = str(field.get("label") or "").strip().lower()
-        if any(part in name or part in label for part in _ANSWER_LABEL_PARTS):
+        tokens = _tokens(field["name"]) | _tokens(field.get("label") or "")
+        if tokens.intersection(_ANSWER_LABEL_PARTS):
             return field["name"]
 
     if len(usable) >= 2:
@@ -75,8 +81,10 @@ def compose_enrichment(
 
     target = resolve_target_field(fields)
     preamble = (
-        "These extend the rules above. Where they conflict with rules 6 and 8,\n"
-        "they are the explicit exception, limited to the depth requested below.\n"
+        "These extend the rules above. They are the explicit exception to two of them:\n"
+        "the rule against leaving a field empty when the content does not supply it,\n"
+        "and the rule against adding facts that are not in the content (provided every\n"
+        'addition is marked "(not in slides)").\n'
         "- You MAY supplement sparse slide content with established knowledge.\n"
         "  Mark every explanation/derivation/application not present in the\n"
         '  provided content by ending that passage with "(not in slides)".\n'

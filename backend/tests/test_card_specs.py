@@ -35,6 +35,29 @@ def test_resolve_matches_back_label() -> None:
     assert resolve_target_field(fields) == "definition"
 
 
+def test_resolve_matches_whole_token_in_first_field_label() -> None:
+    fields = [
+        {"name": "definition", "label": "Back / Answer"},
+        {"name": "front", "label": "Front"},
+    ]
+    assert resolve_target_field(fields) == "definition"
+
+
+def test_resolve_does_not_substring_match_feedback() -> None:
+    fields = [{"name": "feedback"}, {"name": "question"}]
+    assert resolve_target_field(fields) == "question"
+
+
+def test_resolve_does_not_substring_match_background() -> None:
+    fields = [{"name": "background"}, {"name": "question"}]
+    assert resolve_target_field(fields) == "question"
+
+
+def test_resolve_does_not_substring_match_unanswered() -> None:
+    fields = [{"name": "unanswered"}, {"name": "question"}]
+    assert resolve_target_field(fields) == "question"
+
+
 def test_resolve_falls_back_to_second_field() -> None:
     fields = [{"name": "one"}, {"name": "two"}]
     assert resolve_target_field(fields) == "two"
@@ -73,3 +96,10 @@ def test_compose_names_target_field_and_grounding_rule() -> None:
     assert '"answer"' in text
     assert "(not in slides)" in text
     assert "Do not create extra" in text
+
+
+def test_preamble_names_the_rules_it_exempts() -> None:
+    text = compose_enrichment(["common_mistakes"], "", FIELDS)
+    assert "leaving a field empty" in text
+    assert "adding facts that are not in the content" in text
+    assert "rules 6 and 8" not in text
