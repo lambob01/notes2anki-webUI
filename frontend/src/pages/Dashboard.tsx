@@ -17,6 +17,7 @@ const DEFAULT_CONFIG = {
   deck_name: 'Default',
   custom_prompt: '',
   subject_context: '',
+  card_specs: [],
   dpi: 150,
   max_workers: 4,
   force: false,

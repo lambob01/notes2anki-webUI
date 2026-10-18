@@ -89,6 +89,7 @@ export interface GenerateRequest {
   deck_name: string
   custom_prompt?: string
   subject_context?: string
+  card_specs?: string[]
   source_text?: string
   source_title?: string
   source_filename?: string

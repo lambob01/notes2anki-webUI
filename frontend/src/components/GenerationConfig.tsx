@@ -3,6 +3,13 @@ import { api } from '@/lib/api'
 import { RefreshCw } from 'lucide-react'
 import { ModelCombobox } from '@/components/ModelCombobox'
 
+const ENRICHMENT_PRESETS = [
+  { key: 'explanations', label: 'Explanations', hint: 'Explain the why, not just the what' },
+  { key: 'derivations', label: 'Derivations', hint: 'Step-by-step math for formulas' },
+  { key: 'common_mistakes', label: 'Common mistakes', hint: 'Call out misconceptions' },
+  { key: 'real_world_applications', label: 'Real-world uses', hint: 'Connect ideas to physical examples' },
+] as const
+
 interface Props {
   providers: any[]
   templates: any[]
@@ -35,6 +42,15 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
   })
 
   const activeProviders = providers.filter((p: any) => p.is_active)
+
+  const cardSpecs: string[] = config.card_specs || []
+
+  const toggleCardSpec = (key: string) => {
+    const next = cardSpecs.includes(key)
+      ? cardSpecs.filter((k: string) => k !== key)
+      : [...cardSpecs, key]
+    onChange({ ...config, card_specs: next })
+  }
 
   return (
     <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5 dark:bg-gray-800 dark:border-gray-700">
@@ -132,15 +148,42 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
       </div>
 
       <div>
+        <label className="block text-xs font-medium text-gray-500 mb-2 dark:text-gray-400">Enrichment</label>
+        <div className="grid grid-cols-2 gap-2">
+          {ENRICHMENT_PRESETS.map((preset) => {
+            const active = cardSpecs.includes(preset.key)
+            return (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => toggleCardSpec(preset.key)}
+                className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                  active
+                    ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-900/30 dark:text-red-300'
+                    : 'border-gray-300 text-gray-700 hover:border-gray-400 dark:border-gray-600 dark:text-gray-300'
+                }`}
+              >
+                <span className="font-medium">{preset.label}</span>
+                <span className="block text-xs text-gray-500 dark:text-gray-400">{preset.hint}</span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
+          Added depth goes in the answer/back field and is marked &quot;(not in slides)&quot;.
+        </p>
+      </div>
+
+      <div>
         <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">
-          Custom Prompt (optional)
+          Additional instructions (optional)
         </label>
         <textarea
           value={config.custom_prompt}
           onChange={(e) => onChange({ ...config, custom_prompt: e.target.value })}
           rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          placeholder="Custom system prompt for the AI..."
+          placeholder="e.g. connect each formula to the physical meaning of each term"
         />
       </div>
 
