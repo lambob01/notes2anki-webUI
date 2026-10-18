@@ -65,6 +65,16 @@ CARD_COUNT_HINT = (
     "dense content should yield many."
 )
 
+ENRICHMENT_HEADER = "ADDITIONAL REQUIREMENTS (from the user):"
+
+
+def _append_enrichment(prompt: str, custom_prompt: str | None) -> str:
+    """Append user enrichment below the built-in rules, never above them."""
+    if not custom_prompt or not custom_prompt.strip():
+        return prompt
+    return f"{prompt}\n\n{ENRICHMENT_HEADER}\n{custom_prompt.strip()}"
+
+
 # Fallback descriptions for the fields the original CLI note type used, so
 # templates created before per-field descriptions existed still guide the model.
 LEGACY_FIELD_HINTS = {
@@ -134,8 +144,7 @@ def generate_cards_text(
     prompt = build_card_prompt(template_fields, subject_context)
     if global_context.strip():
         prompt += f"\n\nGlobal lecture context:\n{global_context}"
-    if custom_prompt:
-        prompt = custom_prompt + "\n\n" + prompt
+    prompt = _append_enrichment(prompt, custom_prompt)
 
     # System goes as a separate argument: Anthropic takes it top-level, and the
     # OpenAI adapter re-inserts it as messages[0].
@@ -164,8 +173,7 @@ def generate_cards_vision(
     prompt = build_card_prompt(template_fields, subject_context)
     if global_context.strip():
         prompt += f"\n\nGlobal lecture context:\n{global_context}"
-    if custom_prompt:
-        prompt = custom_prompt + "\n\n" + prompt
+    prompt = _append_enrichment(prompt, custom_prompt)
 
     image_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
