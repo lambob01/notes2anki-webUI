@@ -109,6 +109,7 @@ class GenerateRequest(BaseModel):
     deck_name: str = "Default"
     custom_prompt: Optional[str] = None
     subject_context: Optional[str] = None
+    card_specs: list[str] = []
     source_text: Optional[str] = None
     source_title: Optional[str] = None
     source_filename: Optional[str] = None

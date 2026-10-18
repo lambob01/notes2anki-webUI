@@ -30,6 +30,7 @@ from app.services.ai_generator import (
     generate_cards_vision,
     generate_global_context,
 )
+from app.services.card_specs import compose_enrichment
 from app.services.document_reader import DocumentReader
 
 router = APIRouter()
@@ -455,7 +456,9 @@ def start_generation(data: GenerateRequest, background_tasks: BackgroundTasks, d
         model_name=data.model_name,
         template_id=data.template_id,
         deck_name=data.deck_name,
-        custom_prompt=data.custom_prompt,
+        custom_prompt=compose_enrichment(
+            data.card_specs, data.custom_prompt, template.fields
+        ),
         subject_context=data.subject_context,
         dpi=data.dpi,
         max_workers=data.max_workers,
@@ -509,7 +512,9 @@ def generate_from_file(
         model_name=data.model_name,
         template_id=data.template_id,
         deck_name=data.deck_name,
-        custom_prompt=data.custom_prompt,
+        custom_prompt=compose_enrichment(
+            data.card_specs, data.custom_prompt, template.fields
+        ),
         subject_context=data.subject_context,
         dpi=data.dpi,
         max_workers=data.max_workers,
