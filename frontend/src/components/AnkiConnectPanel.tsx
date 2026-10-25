@@ -1,117 +1,152 @@
 import { useState } from 'react'
-import { CheckCircle2, XCircle, RefreshCw, Copy, Zap } from 'lucide-react'
+import {
+  CheckCircle2,
+  Copy,
+  ExternalLink,
+  RefreshCw,
+  XCircle,
+  Zap,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
+import { Badge, Button, Panel, PanelHeader } from '@/components/ui'
+import { useAnkiStatus } from '@/hooks/useAnkiStatus'
 import { anki, AnkiConnectError } from '@/lib/ankiconnect'
+import { formatRelativeTime } from '@/lib/format'
 
 export function AnkiConnectPanel() {
-  const [status, setStatus] = useState<'unknown' | 'ok' | 'error'>('unknown')
-  const [detail, setDetail] = useState<string>('')
+  const { status, report } = useAnkiStatus()
   const [testing, setTesting] = useState(false)
-
   const origin = window.location.origin
+
+  const config = `{
+    "webCorsOriginList": [
+        "http://localhost",
+        "${origin}"
+    ]
+}`
 
   const test = async () => {
     setTesting(true)
     try {
       const version = await anki.version()
       const decks = await anki.deckNames()
-      setStatus('ok')
-      setDetail(`AnkiConnect v${version} · ${decks.length} deck(s) found`)
+      report(true, `AnkiConnect v${version} · ${decks.length} deck(s) found`)
       toast.success('Connected to Anki')
-    } catch (e: any) {
-      setStatus('error')
-      setDetail(e instanceof AnkiConnectError ? e.message : String(e))
+    } catch (error: any) {
+      const message =
+        error instanceof AnkiConnectError ? error.message : String(error)
+      report(false, message)
+      toast.error(message, { duration: 8000 })
+    } finally {
+      setTesting(false)
     }
-    setTesting(false)
   }
 
-  const copyOrigin = () => {
-    navigator.clipboard.writeText(origin)
-    toast.success('Origin copied')
+  const copyConfig = async () => {
+    try {
+      await navigator.clipboard.writeText(config)
+      toast.success('AnkiConnect config copied')
+    } catch {
+      toast.error('Clipboard unavailable — select and copy the config manually')
+    }
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 dark:bg-gray-800 dark:border-gray-700">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Zap className="w-5 h-5 text-red-600 dark:text-red-400" />
-          <h2 className="font-semibold text-gray-700 dark:text-gray-200">Anki Connection</h2>
+    <Panel>
+      <PanelHeader
+        title="Anki connection"
+        description="Cards travel from your browser straight to Anki over AnkiConnect."
+        actions={
+          <Button variant="primary" size="sm" onClick={test} loading={testing}>
+            {!testing ? <RefreshCw className="h-3.5 w-3.5" /> : null}
+            Test connection
+          </Button>
+        }
+      />
+
+      <div className="space-y-5 p-4">
+        <div className="flex items-start gap-3 rounded-md border border-line bg-raised/40 p-3">
+          <span className="mt-0.5 shrink-0">
+            {status.ok ? (
+              <CheckCircle2 className="h-4 w-4 text-success" />
+            ) : status.checkedAt ? (
+              <XCircle className="h-4 w-4 text-danger" />
+            ) : (
+              <Zap className="h-4 w-4 text-faint" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="text-[13px] font-medium text-ink">
+                {status.ok
+                  ? 'Connected'
+                  : status.checkedAt
+                    ? 'Not connected'
+                    : 'Not tested yet'}
+              </p>
+              {status.checkedAt ? (
+                <span className="font-mono text-[10px] uppercase tracking-wider text-faint">
+                  checked {formatRelativeTime(status.checkedAt)}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-[12px] text-muted">
+              {status.detail ||
+                'Anki must be open with the AnkiConnect add-on before adding cards.'}
+            </p>
+          </div>
+          <Badge tone={status.ok ? 'success' : status.checkedAt ? 'danger' : 'neutral'}>
+            {status.ok ? 'ready' : status.checkedAt ? 'offline' : 'unknown'}
+          </Badge>
         </div>
-        <button
-          onClick={test}
-          disabled={testing}
-          className="flex items-center gap-2 px-3 py-1.5 bg-red-600 text-white rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${testing ? 'animate-spin' : ''}`} />
-          Test connection
-        </button>
+
+        <details open={!status.ok} className="rounded-md border border-line bg-canvas/40">
+          <summary className="cursor-pointer list-none px-3 py-2.5 text-[12px] text-muted transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+            One-time setup
+          </summary>
+          <div className="space-y-4 border-t border-line p-3">
+            <ol className="list-decimal space-y-2 pl-4 text-[12px] leading-relaxed text-muted">
+              <li>
+                Install the{' '}
+                <a
+                  href="https://ankiweb.net/shared/info/2055492159"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 text-ink underline decoration-line underline-offset-2 hover:decoration-ink"
+                >
+                  AnkiConnect add-on
+                  <ExternalLink className="h-3 w-3" />
+                </a>{' '}
+                (code <code className="rounded bg-raised px-1 font-mono text-[11px]">2055492159</code>).
+              </li>
+              <li>
+                In Anki, open <strong className="text-ink">Tools → Add-ons → AnkiConnect → Config</strong>{' '}
+                and paste this configuration:
+              </li>
+            </ol>
+
+            <div className="relative">
+              <pre className="overflow-x-auto rounded-md border border-line bg-canvas p-3 font-mono text-[10px] leading-relaxed text-muted">
+                {config}
+              </pre>
+              <button
+                type="button"
+                onClick={copyConfig}
+                title="Copy AnkiConnect config"
+                className="absolute right-2 top-2 rounded border border-line bg-panel p-1.5 text-faint transition-colors hover:text-ink"
+              >
+                <Copy className="h-3 w-3" />
+              </button>
+            </div>
+
+            <p className="text-[11px] leading-relaxed text-faint">
+              Restart Anki after saving the config. Anki must stay open while cards are
+              added. If you would rather not use AnkiConnect, download a .apkg from the
+              review page and import it manually.
+            </p>
+          </div>
+        </details>
       </div>
-
-      {status !== 'unknown' && (
-        <div
-          className={`flex items-start gap-2 text-sm p-3 rounded-lg ${
-            status === 'ok'
-              ? 'bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-300'
-              : 'bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300'
-          }`}
-        >
-          {status === 'ok' ? (
-            <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
-          ) : (
-            <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
-          )}
-          <span>{detail}</span>
-        </div>
-      )}
-
-      <div className="text-sm text-gray-600 space-y-3 dark:text-gray-300">
-        <p className="text-gray-500 dark:text-gray-400">
-          Cards are sent from your browser straight to Anki, so Anki never has to
-          be reachable over the network. One-time setup:
-        </p>
-        <ol className="list-decimal list-inside space-y-2 text-gray-600 dark:text-gray-300">
-          <li>
-            Install the{' '}
-            <a
-              href="https://ankiweb.net/shared/info/2055492159"
-              target="_blank"
-              rel="noreferrer"
-              className="text-red-600 hover:underline dark:text-red-400"
-            >
-              AnkiConnect add-on
-            </a>{' '}
-            (code <code className="bg-gray-100 px-1 rounded dark:bg-gray-700">2055492159</code>).
-          </li>
-          <li>
-            In Anki: <strong>Tools → Add-ons → AnkiConnect → Config</strong>, and
-            add this page's address to <code>webCorsOriginList</code>:
-          </li>
-        </ol>
-
-        <div className="relative">
-          <pre className="bg-gray-900 text-gray-100 text-xs p-3 rounded-lg overflow-x-auto">
-{`{
-    "webCorsOriginList": [
-        "http://localhost",
-        "${origin}"
-    ]
-}`}
-          </pre>
-          <button
-            onClick={copyOrigin}
-            title="Copy this app's origin"
-            className="absolute top-2 right-2 p-1.5 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded"
-          >
-            <Copy className="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <p className="text-xs text-gray-400 dark:text-gray-500">
-          Restart Anki after editing the config. Anki must stay open while adding
-          cards. If you'd rather not use AnkiConnect at all, the Review page can
-          still download a .apkg file to import manually.
-        </p>
-      </div>
-    </div>
+    </Panel>
   )
 }

@@ -3,19 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Notes2Anki</title>
-    <meta name="description" content="AI-powered Anki flashcard generator" />
+    <title>notes2anki</title>
+    <meta name="description" content="Turn lecture slides into review-ready Anki flashcards" />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#08080a" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <script>
-      // Apply the saved theme before first paint to avoid a light flash (FOUC).
-      // Mirrors the useTheme hook: explicit localStorage wins, else system pref.
+      // Apply the saved theme before first paint. Dark is the default identity;
+      // only an explicit "light" choice switches away from it.
       try {
         var stored = localStorage.getItem('notes2anki:theme')
-        var dark = stored ? stored === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches
-        if (dark) document.documentElement.classList.add('dark')
+        if (stored !== 'light') document.documentElement.classList.add('dark')
       } catch (e) {}
     </script>
   </head>
-  <body class="bg-gray-50 text-gray-900 dark:bg-gray-950 dark:text-gray-100 min-h-screen">
+  <body class="bg-canvas text-ink min-h-screen">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

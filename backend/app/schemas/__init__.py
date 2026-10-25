@@ -107,9 +107,12 @@ class GenerateRequest(BaseModel):
     model_name: str
     template_id: str
     deck_name: str = "Default"
+    target_card_count: Optional[int] = None
     custom_prompt: Optional[str] = None
     subject_context: Optional[str] = None
     card_specs: list[str] = []
+    # A plain-language request instead of source material (source_type=topic).
+    topic: Optional[str] = None
     source_text: Optional[str] = None
     source_title: Optional[str] = None
     source_filename: Optional[str] = None
@@ -170,6 +173,7 @@ class GenerationStatusSchema(_GenerationProgressMixin):
     """
     id: str
     title: Optional[str] = None
+    source_type: str = "text"
     deck_name: str = "Default"
     model_name: str
     template_id: str
@@ -203,6 +207,7 @@ class GenerationSchema(_GenerationProgressMixin):
     model_name: str
     template_id: str
     deck_name: str = "Default"
+    target_card_count: Optional[int] = None
     custom_prompt: Optional[str] = None
     subject_context: Optional[str] = None
     status: str = "pending"

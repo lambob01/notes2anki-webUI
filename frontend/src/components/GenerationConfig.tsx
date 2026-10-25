@@ -1,25 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import { Check, RefreshCw } from 'lucide-react'
 import { api } from '@/lib/api'
-import { RefreshCw } from 'lucide-react'
+import { Field, Input, Select, Switch, Textarea } from '@/components/ui'
 import { ModelCombobox } from '@/components/ModelCombobox'
+import { cn } from '@/lib/cn'
 
 const ENRICHMENT_PRESETS = [
   { key: 'explanations', label: 'Explanations', hint: 'Explain the why, not just the what' },
   { key: 'derivations', label: 'Derivations', hint: 'Step-by-step math for formulas' },
   { key: 'common_mistakes', label: 'Common mistakes', hint: 'Call out misconceptions' },
-  { key: 'real_world_applications', label: 'Real-world uses', hint: 'Connect ideas to physical examples' },
+  {
+    key: 'real_world_applications',
+    label: 'Real-world uses',
+    hint: 'Connect ideas to physical examples',
+  },
 ] as const
 
+type Mode = 'file' | 'text' | 'topic'
+
 interface Props {
+  mode: Mode
   providers: any[]
   templates: any[]
   config: any
   onChange: (config: any) => void
 }
 
-export function GenerationConfig({ providers, templates, config, onChange }: Props) {
+export function GenerationConfig({ mode, providers, templates, config, onChange }: Props) {
   const queryClient = useQueryClient()
-  const selectedProvider = providers.find((p: any) => p.id === config.provider_id)
 
   const { data: models } = useQuery({
     queryKey: ['models', config.provider_id],
@@ -29,7 +39,15 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
 
   const fetchModelsMutation = useMutation({
     mutationFn: () => api.providers.fetchModels(config.provider_id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['models', config.provider_id] }),
+    onSuccess: (result: any) => {
+      queryClient.invalidateQueries({ queryKey: ['models', config.provider_id] })
+      toast.success(
+        result?.added
+          ? `Fetched ${result.added} new model${result.added === 1 ? '' : 's'}`
+          : 'Model list is already up to date'
+      )
+    },
+    onError: (error: any) => toast.error(error.message),
   })
 
   const addCustomModelMutation = useMutation({
@@ -41,114 +59,116 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
     onError: () => {},
   })
 
-  const activeProviders = providers.filter((p: any) => p.is_active)
-
+  const activeProviders = providers.filter((provider: any) => provider.is_active)
   const cardSpecs: string[] = config.card_specs || []
 
   const toggleCardSpec = (key: string) => {
     const next = cardSpecs.includes(key)
-      ? cardSpecs.filter((k: string) => k !== key)
+      ? cardSpecs.filter((item: string) => item !== key)
       : [...cardSpecs, key]
     onChange({ ...config, card_specs: next })
   }
 
   return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-5 dark:bg-gray-800 dark:border-gray-700">
-      <h3 className="font-semibold text-gray-700 dark:text-gray-200">Generation Settings</h3>
-
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">API Provider</label>
-          <select
-            value={config.provider_id}
-            onChange={(e) => onChange({ ...config, provider_id: e.target.value, model_name: '' })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            <option value="">Select provider...</option>
-            {activeProviders.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <label className="text-xs font-medium text-gray-500 dark:text-gray-400">Model</label>
-            {config.provider_id && (
-              <button
-                onClick={() => fetchModelsMutation.mutate()}
-                disabled={fetchModelsMutation.isPending}
-                className="text-xs text-red-600 hover:text-red-800 flex items-center gap-1 dark:text-red-400 dark:hover:text-red-300"
-              >
-                <RefreshCw className={`w-3 h-3 ${fetchModelsMutation.isPending ? 'animate-spin' : ''}`} />
-                Fetch
-              </button>
-            )}
-          </div>
-          <ModelCombobox
-            models={models || []}
-            value={config.model_name}
-            onChange={(model_name) => onChange({ ...config, model_name })}
-            // Persist hand-typed names so they're in the list next time.
-            onAddCustom={(model_id) => addCustomModelMutation.mutate(model_id)}
-            disabled={!config.provider_id}
-          />
-        </div>
+    <div className="space-y-5 p-5">
+      <div>
+        <h2 className="text-[13px] font-medium text-ink">Generation settings</h2>
+        <p className="mt-0.5 text-xs text-muted">
+          {mode === 'topic'
+            ? 'Choose the model, template, and how much depth to add.'
+            : 'Choose where the cards come from.'}
+        </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">Card Template</label>
-          <select
-            value={config.template_id}
-            onChange={(e) => onChange({ ...config, template_id: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          >
-            <option value="">Select template...</option>
-            {templates.map((t: any) => (
-              <option key={t.id} value={t.id}>{t.name} ({t.note_type})</option>
-            ))}
-          </select>
-        </div>
+      <Field
+        label="API provider"
+        hint={
+          activeProviders.length === 0 ? (
+            <Link to="/settings" className="text-ink underline decoration-line underline-offset-2">
+              Add one
+            </Link>
+          ) : undefined
+        }
+      >
+        <Select
+          value={config.provider_id}
+          onChange={(event) =>
+            onChange({ ...config, provider_id: event.target.value, model_name: '' })
+          }
+        >
+          <option value="">Select provider…</option>
+          {activeProviders.map((provider: any) => (
+            <option key={provider.id} value={provider.id}>
+              {provider.name}
+            </option>
+          ))}
+        </Select>
+      </Field>
 
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">Deck Name</label>
-          <input
-            type="text"
+      <Field
+        label="Model"
+        hint={
+          config.provider_id ? (
+            <button
+              type="button"
+              onClick={() => fetchModelsMutation.mutate()}
+              disabled={fetchModelsMutation.isPending}
+              className="inline-flex items-center gap-1 text-[11px] text-muted transition-colors hover:text-ink disabled:opacity-50"
+            >
+              <RefreshCw
+                className={cn('h-3 w-3', fetchModelsMutation.isPending && 'animate-spin')}
+              />
+              Fetch
+            </button>
+          ) : undefined
+        }
+      >
+        <ModelCombobox
+          models={models || []}
+          value={config.model_name}
+          onChange={(model_name) => onChange({ ...config, model_name })}
+          onAddCustom={(model_id) => addCustomModelMutation.mutate(model_id)}
+          disabled={!config.provider_id}
+        />
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Template">
+          <Select
+            value={config.template_id}
+            onChange={(event) => onChange({ ...config, template_id: event.target.value })}
+          >
+            <option value="">Select…</option>
+            {templates.map((template: any) => (
+              <option key={template.id} value={template.id}>
+                {template.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+
+        <Field label="Deck">
+          <Input
             value={config.deck_name}
-            onChange={(e) => onChange({ ...config, deck_name: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+            onChange={(event) => onChange({ ...config, deck_name: event.target.value })}
             placeholder="Default"
           />
-        </div>
+        </Field>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">Subject Context</label>
-          <input
-            type="text"
-            value={config.subject_context}
-            onChange={(e) => onChange({ ...config, subject_context: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-            placeholder="e.g. Biology 101"
-          />
-        </div>
-        <div className="flex items-end pb-1">
-          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer dark:text-gray-300">
-            <input
-              type="checkbox"
-              checked={!!config.force}
-              onChange={(e) => onChange({ ...config, force: e.target.checked })}
-              className="rounded"
-            />
-            Re-process already processed slides
-          </label>
-        </div>
-      </div>
+      <Field label="Subject context" hint="optional">
+        <Input
+          value={config.subject_context}
+          onChange={(event) => onChange({ ...config, subject_context: event.target.value })}
+          placeholder="e.g. Biology 101"
+        />
+      </Field>
 
       <div>
-        <label className="block text-xs font-medium text-gray-500 mb-2 dark:text-gray-400">Enrichment</label>
+        <div className="mb-2 flex items-baseline justify-between">
+          <span className="eyebrow">Enrichment</span>
+          <span className="text-[11px] text-faint">optional</span>
+        </div>
         <div className="grid grid-cols-2 gap-2">
           {ENRICHMENT_PRESETS.map((preset) => {
             const active = cardSpecs.includes(preset.key)
@@ -158,66 +178,120 @@ export function GenerationConfig({ providers, templates, config, onChange }: Pro
                 type="button"
                 aria-pressed={active}
                 onClick={() => toggleCardSpec(preset.key)}
-                className={`text-left px-3 py-2 rounded-lg border text-sm transition-colors ${
+                className={cn(
+                  'rounded-md border p-2.5 text-left transition-colors',
                   active
-                    ? 'border-red-500 bg-red-50 text-red-700 dark:border-red-500 dark:bg-red-900/30 dark:text-red-300'
-                    : 'border-gray-300 text-gray-700 hover:border-gray-400 dark:border-gray-600 dark:text-gray-300'
-                }`}
+                    ? 'border-line-strong bg-raised text-ink'
+                    : 'border-line bg-panel text-muted hover:border-line-strong hover:text-ink'
+                )}
               >
-                <span className="font-medium">{preset.label}</span>
-                <span className={`block text-xs ${active ? '' : 'text-gray-500 dark:text-gray-400'}`}>{preset.hint}</span>
+                <span className="flex items-center gap-1.5 text-[12px] font-medium">
+                  <span
+                    className={cn(
+                      'flex h-3.5 w-3.5 items-center justify-center rounded-sm border',
+                      active ? 'border-ink bg-ink text-canvas' : 'border-line-strong'
+                    )}
+                  >
+                    {active ? <Check className="h-2.5 w-2.5" strokeWidth={3} /> : null}
+                  </span>
+                  {preset.label}
+                </span>
+                <span className="mt-1 block pl-5 text-[10px] leading-snug text-faint">
+                  {preset.hint}
+                </span>
               </button>
             )
           })}
         </div>
-        <p className="text-xs text-gray-500 mt-1 dark:text-gray-400">
-          Added depth goes in the template&apos;s answer/back (or main content) field and is marked &quot;(not in slides)&quot;.
+        <p className="mt-2 text-[11px] leading-relaxed text-faint">
+          {mode === 'topic'
+            ? "Added depth goes in the template's answer field."
+            : 'Added depth goes in the template\'s answer field and is marked "not in slides".'}
         </p>
       </div>
 
-      <div>
-        <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">
-          Additional instructions (optional)
-        </label>
-        <textarea
+      <Field label="Additional instructions" hint="optional">
+        <Textarea
           value={config.custom_prompt}
-          onChange={(e) => onChange({ ...config, custom_prompt: e.target.value })}
+          onChange={(event) => onChange({ ...config, custom_prompt: event.target.value })}
           rows={2}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm resize-y dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
-          placeholder="e.g. connect each formula to the physical meaning of each term"
+          placeholder={
+            mode === 'topic'
+              ? 'e.g. focus on boundary-layer separation, at undergraduate level'
+              : 'e.g. connect each formula to the physical meaning of each term'
+          }
         />
-      </div>
+      </Field>
 
-      <details className="text-sm">
-        <summary className="text-gray-500 cursor-pointer dark:text-gray-400">Advanced</summary>
-        <div className="grid grid-cols-2 gap-4 mt-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">DPI: {config.dpi}</label>
-            <input
-              type="range"
-              min={72}
-              max={300}
-              step={10}
-              value={config.dpi}
-              onChange={(e) => onChange({ ...config, dpi: parseInt(e.target.value) })}
-              className="w-full"
-            />
+      {mode === 'file' ? (
+        <>
+          <div className="rounded-md border border-line bg-canvas/40">
+            <div className="flex items-center justify-between gap-3 px-3 py-2.5">
+              <div>
+                <p className="text-[12px] text-ink">Reprocess processed slides</p>
+                <p className="mt-0.5 text-[10px] text-faint">
+                  Re-run slides this file has already generated before.
+                </p>
+              </div>
+              <Switch
+                checked={!!config.force}
+                onChange={(force) => onChange({ ...config, force })}
+                label="Reprocess processed slides"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 dark:text-gray-400">
-              Parallel Workers: {config.max_workers}
-            </label>
-            <input
-              type="range"
-              min={1}
-              max={8}
-              value={config.max_workers}
-              onChange={(e) => onChange({ ...config, max_workers: parseInt(e.target.value) })}
-              className="w-full"
-            />
-          </div>
-        </div>
-      </details>
+
+          <details className="group rounded-md border border-line bg-canvas/40">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-[12px] text-muted transition-colors hover:text-ink [&::-webkit-details-marker]:hidden">
+              Advanced
+              <span className="font-mono text-[10px] text-faint group-open:hidden">OPEN</span>
+              <span className="hidden font-mono text-[10px] text-faint group-open:inline">
+                CLOSE
+              </span>
+            </summary>
+            <div className="space-y-4 border-t border-line px-3 py-3">
+              <label className="block">
+                <span className="mb-1 flex items-baseline justify-between">
+                  <span className="eyebrow">Render DPI</span>
+                  <span className="font-mono text-[11px] tabular-nums text-muted">
+                    {config.dpi}
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min={72}
+                  max={300}
+                  step={10}
+                  value={config.dpi}
+                  onChange={(event) =>
+                    onChange({ ...config, dpi: parseInt(event.target.value, 10) })
+                  }
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-line accent-ink"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1 flex items-baseline justify-between">
+                  <span className="eyebrow">Parallel workers</span>
+                  <span className="font-mono text-[11px] tabular-nums text-muted">
+                    {config.max_workers}
+                  </span>
+                </span>
+                <input
+                  type="range"
+                  min={1}
+                  max={8}
+                  value={config.max_workers}
+                  onChange={(event) =>
+                    onChange({ ...config, max_workers: parseInt(event.target.value, 10) })
+                  }
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-line accent-ink"
+                />
+              </label>
+            </div>
+          </details>
+        </>
+      ) : null}
+
     </div>
   )
 }

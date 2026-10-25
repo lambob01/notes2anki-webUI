@@ -1,19 +1,20 @@
-import { Loader2, FileImage, Brain, Sparkles } from 'lucide-react'
+import { Brain, FileImage, Loader2, Sparkles } from 'lucide-react'
+import { cn } from '@/lib/cn'
 
 interface Props {
   phase: string | null
   totalSlides: number
   completedSlides: number
   cardsGenerated: number
+  failedSlides?: number
 }
 
-// Ingestion phases have no per-item count, so the bar is indeterminate until
-// the slide total is known.
 const PHASE_LABELS: Record<string, string> = {
   starting: 'Starting up',
   analyzing: 'Reading the document for overall context',
   rendering: 'Rendering slides to images',
   generating: 'Generating flashcards',
+  writing: 'Writing flashcards from the topic',
   done: 'Complete',
   failed: 'Failed',
   skipped_all_duplicates: 'No new slides to process',
@@ -23,6 +24,7 @@ const PHASE_ICONS: Record<string, typeof Loader2> = {
   analyzing: Brain,
   rendering: FileImage,
   generating: Sparkles,
+  writing: Sparkles,
 }
 
 export function GenerationProgress({
@@ -30,6 +32,7 @@ export function GenerationProgress({
   totalSlides,
   completedSlides,
   cardsGenerated,
+  failedSlides = 0,
 }: Props) {
   const label = PHASE_LABELS[phase ?? ''] ?? 'Working'
   const Icon = PHASE_ICONS[phase ?? ''] ?? Loader2
@@ -39,36 +42,57 @@ export function GenerationProgress({
     : 0
 
   return (
-    <div className="p-4 bg-white border border-gray-200 rounded-xl space-y-3 dark:bg-gray-800 dark:border-gray-700">
+    <div className="rounded-lg border border-line bg-panel p-4 shadow-panel">
       <div className="flex items-center gap-2">
-        <Icon className="w-4 h-4 text-red-600 animate-pulse dark:text-red-400" />
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200">{label}</span>
-        {determinate && (
-          <span className="text-sm text-gray-400 ml-auto tabular-nums dark:text-gray-500">
+        <Icon
+          className={cn(
+            'h-4 w-4 text-muted',
+            phase !== 'done' && 'animate-pulse'
+          )}
+        />
+        <span className="text-[13px] font-medium text-ink">{label}</span>
+        {determinate ? (
+          <span className="ml-auto font-mono text-[11px] tabular-nums text-muted">
             {completedSlides} / {totalSlides} slides
           </span>
-        )}
+        ) : null}
       </div>
 
-      <div className="h-2 bg-gray-100 rounded-full overflow-hidden dark:bg-gray-700">
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-line">
         {determinate ? (
           <div
-            className="h-full bg-red-600 rounded-full transition-[width] duration-500 ease-out"
+            className="h-full rounded-full bg-ink transition-[width] duration-500 ease-out"
             style={{ width: `${pct}%` }}
           />
         ) : (
-          // Indeterminate: a sliding bar, since we can't know the total yet.
-          <div className="h-full w-1/3 bg-red-400 rounded-full animate-[progressSlide_1.4s_ease-in-out_infinite]" />
+          <div className="h-full w-1/3 animate-[progressSlide_1.4s_ease-in-out_infinite] rounded-full bg-ink/50" />
         )}
       </div>
 
-      <div className="flex items-center justify-between text-xs text-gray-400 dark:text-gray-500">
-        <span>
-          {cardsGenerated > 0
-            ? `${cardsGenerated} card${cardsGenerated === 1 ? '' : 's'} so far`
-            : 'No cards yet'}
-        </span>
-        {determinate && <span className="tabular-nums">{pct}%</span>}
+      <div className="mt-3 grid grid-cols-3 gap-3">
+        <div>
+          <p className="eyebrow">Progress</p>
+          <p className="mt-0.5 font-mono text-[13px] tabular-nums text-ink">
+            {determinate ? `${pct}%` : '—'}
+          </p>
+        </div>
+        <div>
+          <p className="eyebrow">Cards so far</p>
+          <p className="mt-0.5 font-mono text-[13px] tabular-nums text-ink">
+            {cardsGenerated}
+          </p>
+        </div>
+        <div>
+          <p className="eyebrow">Failures</p>
+          <p
+            className={cn(
+              'mt-0.5 font-mono text-[13px] tabular-nums',
+              failedSlides > 0 ? 'text-warning' : 'text-ink'
+            )}
+          >
+            {failedSlides}
+          </p>
+        </div>
       </div>
     </div>
   )

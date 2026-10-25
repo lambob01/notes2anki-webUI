@@ -4,7 +4,7 @@ Turn lecture PPTX/PDF/TXT into Anki flashcards via a vision LLM. Self-hosted, si
 
 ## What it does
 
-- Upload a lecture PPTX/PDF/TXT (or paste text), pick a provider + model + card template
+- Upload a lecture PPTX/PDF/TXT, paste text, or describe a topic in plain language and let the model write explanatory cards from its own knowledge (with an optional card count)
 - The backend renders each slide to an image, sends it (plus speaker notes) to a vision LLM
 - Structured output is steered by your note type's own field definitions, with automatic tier fallback (`json_schema` → `json_object` → prompt-only) for runtimes like Ollama and LM Studio
 - Review, edit, and select cards before they hit Anki — each card carries a picture of its source slide

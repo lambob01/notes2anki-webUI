@@ -1,14 +1,18 @@
 import { useCallback } from 'react'
 import { useDropzone } from 'react-dropzone'
-import { Upload, File, X } from 'lucide-react'
-import { clsx } from 'clsx'
+import { FileText, Upload, X } from 'lucide-react'
+import { cn } from '@/lib/cn'
+import { formatBytes } from '@/lib/format'
 
 interface Props {
   onFile: (file: File) => void
+  onClear: () => void
   uploadedFile: any | null
 }
 
-export function FileDropZone({ onFile, uploadedFile }: Props) {
+const FORMATS = 'PDF, PPTX, DOCX, TXT, MD, PNG, JPG, BMP, GIF, WEBP'
+
+export function FileDropZone({ onFile, onClear, uploadedFile }: Props) {
   const onDrop = useCallback(
     (acceptedFiles: File[]) => {
       if (acceptedFiles.length > 0) onFile(acceptedFiles[0])
@@ -35,19 +39,23 @@ export function FileDropZone({ onFile, uploadedFile }: Props) {
 
   if (uploadedFile) {
     return (
-      <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-200 rounded-lg dark:bg-green-900/30 dark:border-green-800">
-        <File className="w-5 h-5 text-green-600 dark:text-green-400" />
-        <div className="flex-1">
-          <p className="text-sm font-medium text-green-800 dark:text-green-300">{uploadedFile.filename}</p>
-          <p className="text-xs text-green-600 dark:text-green-400">
-            {(uploadedFile.size_bytes / 1024).toFixed(1)} KB &middot; {uploadedFile.extension}
+      <div className="flex items-center gap-3 rounded-lg border border-line bg-raised/60 p-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-line bg-panel">
+          <FileText className="h-4 w-4 text-muted" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-medium text-ink">{uploadedFile.filename}</p>
+          <p className="mt-0.5 font-mono text-[10px] uppercase tracking-wider text-faint">
+            {formatBytes(uploadedFile.size_bytes)} · {uploadedFile.extension}
           </p>
         </div>
         <button
-          onClick={() => onFile(null!)}
-          className="text-green-600 hover:text-green-800 dark:text-green-400 dark:hover:text-green-300"
+          type="button"
+          onClick={onClear}
+          aria-label="Remove file"
+          className="rounded-md p-1.5 text-faint transition-colors hover:bg-panel hover:text-ink"
         >
-          <X className="w-4 h-4" />
+          <X className="h-4 w-4" />
         </button>
       </div>
     )
@@ -56,23 +64,21 @@ export function FileDropZone({ onFile, uploadedFile }: Props) {
   return (
     <div
       {...getRootProps()}
-      className={clsx(
-        'border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-colors',
+      className={cn(
+        'group cursor-pointer rounded-lg border border-dashed px-6 py-10 text-center transition-colors',
         isDragActive
-          ? 'border-red-600 bg-red-50 dark:border-red-500 dark:bg-red-900/30'
-          : 'border-red-300 hover:border-red-600 hover:bg-red-50 dark:border-red-800 dark:hover:border-red-500 dark:hover:bg-red-900/20'
+          ? 'border-ink bg-raised'
+          : 'border-line bg-panel/40 hover:border-line-strong hover:bg-raised/40'
       )}
     >
       <input {...getInputProps()} />
-      <Upload className="w-10 h-10 text-red-600 mx-auto mb-3 dark:text-red-400" />
-      <p className="text-sm text-gray-600 dark:text-gray-300">
-        {isDragActive
-          ? 'Drop your file here...'
-          : 'Drag and drop a file, or click to browse'}
+      <span className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full border border-line bg-panel text-muted transition-colors group-hover:text-ink">
+        <Upload className="h-4 w-4" />
+      </span>
+      <p className="text-[13px] text-ink">
+        {isDragActive ? 'Drop the file here' : 'Drag a lecture file here, or click to browse'}
       </p>
-      <p className="text-xs text-gray-400 mt-1 dark:text-gray-500">
-        PDF, PPTX, DOCX, TXT, MD, PNG, JPG, BMP, GIF, WEBP
-      </p>
+      <p className="mt-1 font-mono text-[10px] uppercase tracking-wider text-faint">{FORMATS}</p>
     </div>
   )
 }

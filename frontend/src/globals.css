@@ -2,9 +2,142 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    color-scheme: light;
+    --canvas: 250 250 250;
+    --panel: 255 255 255;
+    --raised: 241 241 242;
+    --line: 228 228 231;
+    --line-strong: 212 212 216;
+    --ink: 17 17 19;
+    --muted: 107 107 116;
+    --faint: 154 154 162;
+    --success: 34 110 79;
+    --warning: 138 92 22;
+    --danger: 178 51 51;
+    --scrollbar: 200 200 205;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --canvas: 8 8 10;
+    --panel: 15 15 17;
+    --raised: 23 23 26;
+    --line: 38 38 42;
+    --line-strong: 56 56 61;
+    --ink: 237 237 237;
+    --muted: 139 139 147;
+    --faint: 95 95 103;
+    --success: 95 191 138;
+    --warning: 214 167 92;
+    --danger: 217 122 122;
+    --scrollbar: 58 58 64;
+  }
+
+  * {
+    border-color: rgb(var(--line));
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    font-size: 14px;
+    line-height: 1.55;
+    min-height: 100vh;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-semibold tracking-tight text-ink;
+  }
+
+  ::selection {
+    background: rgb(var(--ink) / 0.18);
+    color: rgb(var(--ink));
+  }
+
+  :focus-visible {
+    outline: 1px solid rgb(var(--ink) / 0.55);
+    outline-offset: 2px;
+  }
+
+  input,
+  textarea,
+  select,
+  button {
+    font: inherit;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgb(var(--scrollbar) / 0.7);
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--scrollbar) / 1);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .eyebrow {
+    @apply font-mono text-[10px] uppercase tracking-[0.16em] text-faint;
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      rgb(var(--raised)) 25%,
+      rgb(var(--line) / 0.7) 37%,
+      rgb(var(--raised)) 63%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer rounded-md;
+  }
+}
+
 /* Indeterminate progress bar: used while the slide total is still unknown
    (document parsing / LibreOffice render), before a real percentage exists. */
 @keyframes progressSlide {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(300%); }
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

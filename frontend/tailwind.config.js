@@ -5,34 +5,69 @@ export default {
   theme: {
     extend: {
       colors: {
-        // True-neutral gray (Tailwind's default `gray` is blue-tinted in the
-        // dark shades), so the whole UI reads monochrome.
-        gray: {
-          50: '#fafafa',
-          100: '#f5f5f5',
-          200: '#e5e5e5',
-          300: '#d4d4d4',
-          400: '#a3a3a3',
-          500: '#737373',
-          600: '#525252',
-          700: '#404040',
-          800: '#262626',
-          900: '#171717',
-          950: '#0a0a0a',
+        // Semantic tokens. The channel values live in globals.css so the
+        // light/dark pair stays in one place. There is deliberately no
+        // general-purpose gray/red scale: everything is monochrome except
+        // the three semantic status colors.
+        canvas: 'rgb(var(--canvas) / <alpha-value>)',
+        panel: 'rgb(var(--panel) / <alpha-value>)',
+        raised: 'rgb(var(--raised) / <alpha-value>)',
+        line: 'rgb(var(--line) / <alpha-value>)',
+        'line-strong': 'rgb(var(--line-strong) / <alpha-value>)',
+        ink: 'rgb(var(--ink) / <alpha-value>)',
+        muted: 'rgb(var(--muted) / <alpha-value>)',
+        faint: 'rgb(var(--faint) / <alpha-value>)',
+        success: 'rgb(var(--success) / <alpha-value>)',
+        warning: 'rgb(var(--warning) / <alpha-value>)',
+        danger: 'rgb(var(--danger) / <alpha-value>)',
+      },
+      fontFamily: {
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          'Inter',
+          'Roboto',
+          'sans-serif',
+        ],
+        mono: [
+          'ui-monospace',
+          'SFMono-Regular',
+          '"SF Mono"',
+          'Menlo',
+          'Monaco',
+          '"Cascadia Mono"',
+          'monospace',
+        ],
+      },
+      borderRadius: {
+        DEFAULT: '8px',
+        md: '8px',
+        lg: '10px',
+        xl: '12px',
+      },
+      boxShadow: {
+        panel: 'inset 0 1px 0 0 rgb(255 255 255 / 0.03)',
+        lift: '0 18px 50px -24px rgb(0 0 0 / 0.85)',
+      },
+      keyframes: {
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
         },
-        // Muted oxide-red accent scale, centered on the brand red #a04040.
-        red: {
-          50: '#f7eded',
-          100: '#efdcdc',
-          200: '#e0bcbc',
-          300: '#c99595',
-          400: '#b56c6c',
-          500: '#a85050',
-          600: '#a04040',
-          700: '#883434',
-          800: '#6d2828',
-          900: '#521c1c',
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
         },
+        riseIn: {
+          '0%': { opacity: '0', transform: 'translateY(6px) scale(0.99)' },
+          '100%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+      },
+      animation: {
+        shimmer: 'shimmer 1.6s linear infinite',
+        'fade-in': 'fadeIn 140ms ease-out',
+        'rise-in': 'riseIn 160ms ease-out',
       },
     },
   },

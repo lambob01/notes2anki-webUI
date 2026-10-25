@@ -56,6 +56,19 @@ def resolve_target_field(fields: list[dict] | None) -> str:
     return "answer"
 
 
+def _enrichment_lines(specs: list[str] | None, custom_text: str | None) -> list[str]:
+    lines: list[str] = []
+    for key in dict.fromkeys(specs or []):
+        instruction = PRESETS.get(key)
+        if instruction:
+            lines.append(f"- {instruction}")
+
+    extra = (custom_text or "").strip()
+    if extra:
+        lines.append(extra)
+    return lines
+
+
 def compose_enrichment(
     specs: list[str] | None,
     custom_text: str | None,
@@ -66,16 +79,7 @@ def compose_enrichment(
     Returns an empty string when there is nothing to add, so callers can leave
     the prompt untouched.
     """
-    lines: list[str] = []
-    for key in dict.fromkeys(specs or []):
-        instruction = PRESETS.get(key)
-        if instruction:
-            lines.append(f"- {instruction}")
-
-    extra = (custom_text or "").strip()
-    if extra:
-        lines.append(extra)
-
+    lines = _enrichment_lines(specs, custom_text)
     if not lines:
         return ""
 
@@ -88,6 +92,34 @@ def compose_enrichment(
         "- You MAY supplement sparse slide content with established knowledge.\n"
         "  Mark every explanation/derivation/application not present in the\n"
         '  provided content by ending that passage with "(not in slides)".\n'
+        f'- Put all added depth in the "{target}" field. Do not create extra\n'
+        "  cards to hold it.\n"
+        "- Apply a requirement only where relevant to that card's idea; leave\n"
+        "  cards alone where it would be forced.\n"
+        "- Keep ordinary additions to 2-4 sentences; derivations may be longer."
+    )
+    return preamble + "\n\n" + "\n".join(lines)
+
+
+def compose_topic_enrichment(
+    specs: list[str] | None,
+    custom_text: str | None,
+    fields: list[dict] | None,
+) -> str:
+    """Enrichment for topic requests, where there is no slide source.
+
+    The slide-oriented composer marks added knowledge "(not in slides)" and
+    treats it as an exception to a don't-invent-facts rule. Topic cards are
+    written from established knowledge in the first place, so that framing is
+    wrong; the presets themselves still apply.
+    """
+    lines = _enrichment_lines(specs, custom_text)
+    if not lines:
+        return ""
+
+    target = resolve_target_field(fields)
+    preamble = (
+        "These extend the rules above.\n"
         f'- Put all added depth in the "{target}" field. Do not create extra\n'
         "  cards to hold it.\n"
         "- Apply a requirement only where relevant to that card's idea; leave\n"

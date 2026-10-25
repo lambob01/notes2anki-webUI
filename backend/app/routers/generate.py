@@ -27,10 +27,11 @@ from app.schemas import (
 from app.services.ai_generator import (
     AiError,
     generate_cards_text,
+    generate_cards_topic,
     generate_cards_vision,
     generate_global_context,
 )
-from app.services.card_specs import compose_enrichment
+from app.services.card_specs import compose_enrichment, compose_topic_enrichment
 from app.services.document_reader import DocumentReader
 
 router = APIRouter()
@@ -56,6 +57,12 @@ def _file_digest(filepath: str) -> str:
         while chunk := f.read(8192):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _topic_title(topic: str) -> str:
+    """A readable history label when the user did not supply a title."""
+    one_line = " ".join(topic.split())
+    return one_line[:80] + ("…" if len(one_line) > 80 else "")
 
 
 def _is_slide_processed(db: Session, file_digest: str, slide_index: int) -> bool:
@@ -184,7 +191,9 @@ def _run_generation(generation_id: str, force: bool = False):
         provider_cfg = ProviderConfig.from_row(provider)
 
         try:
-            if gen.source_text:
+            if gen.source_type == "topic":
+                _process_topic(db, gen, provider_cfg, gen.model_name, template_fields)
+            elif gen.source_text:
                 _process_text(db, gen, provider_cfg, gen.model_name, template_fields)
             elif gen.source_filename:
                 _process_file(
@@ -271,7 +280,8 @@ def _process_text(db, gen, provider: ProviderConfig, model_name, template_fields
     for i, card_data in enumerate(cards):
         card = Card(
             generation_id=gen.id,
-            slide_index=i,
+            # Text has no slide to attach; sort_order preserves the card order.
+            slide_index=None,
             fields=card_data,
             selected=True,
             sort_order=float(i),
@@ -279,6 +289,40 @@ def _process_text(db, gen, provider: ProviderConfig, model_name, template_fields
         db.add(card)
     gen.cards_generated = len(cards)
     gen.completed_slides = 1
+    db.commit()
+
+
+def _process_topic(db, gen, provider: ProviderConfig, model_name, template_fields):
+    """One LLM call that writes cards from established knowledge.
+
+    total_slides stays 0 so the review progress bar stays indeterminate; there
+    are no slides to count. Cards deliberately have no slide_index, otherwise
+    the review page would request slide images that do not exist.
+    """
+    gen.phase = "writing"
+    gen.total_slides = 0
+    gen.completed_slides = 0
+    db.commit()
+
+    cards = generate_cards_topic(
+        provider=provider,
+        model_name=model_name,
+        topic=gen.source_text,
+        template_fields=template_fields,
+        custom_prompt=gen.custom_prompt,
+        subject_context=gen.subject_context,
+        target_card_count=gen.target_card_count,
+    )
+    for i, card_data in enumerate(cards):
+        card = Card(
+            generation_id=gen.id,
+            slide_index=None,
+            fields=card_data,
+            selected=True,
+            sort_order=float(i),
+        )
+        db.add(card)
+    gen.cards_generated = len(cards)
     db.commit()
 
 
@@ -439,6 +483,19 @@ def _process_file(
 
 @router.post("", response_model=GenerationSchema)
 def start_generation(data: GenerateRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    topic = (data.topic or "").strip()
+    source_text = data.source_text
+    has_source_text = bool(source_text and source_text.strip())
+
+    if topic and has_source_text:
+        raise HTTPException(400, "Provide either a topic or source text, not both.")
+    if not topic and not has_source_text:
+        raise HTTPException(400, "Provide a topic or source text.")
+    if topic and data.target_card_count is not None and not (
+        1 <= data.target_card_count <= 30
+    ):
+        raise HTTPException(400, "target_card_count must be between 1 and 30.")
+
     provider = db.query(Provider).filter(Provider.id == data.provider_id).first()
     if not provider:
         raise HTTPException(404, "Provider not found")
@@ -447,18 +504,29 @@ def start_generation(data: GenerateRequest, background_tasks: BackgroundTasks, d
     if not template:
         raise HTTPException(404, "Card template not found")
 
+    is_topic = bool(topic)
+    if is_topic:
+        title = (data.source_title or "").strip() or _topic_title(topic)
+        custom_prompt = compose_topic_enrichment(
+            data.card_specs, data.custom_prompt, template.fields
+        )
+    else:
+        title = data.source_title or "Untitled Generation"
+        custom_prompt = compose_enrichment(
+            data.card_specs, data.custom_prompt, template.fields
+        )
+
     gen = Generation(
-        title=data.source_title or "Untitled Generation",
-        source_type="text" if data.source_text else "file",
+        title=title,
+        source_type="topic" if is_topic else "text",
         source_filename=None,
-        source_text=data.source_text,
+        source_text=topic if is_topic else source_text,
+        target_card_count=data.target_card_count if is_topic else None,
         provider_id=data.provider_id,
         model_name=data.model_name,
         template_id=data.template_id,
         deck_name=data.deck_name,
-        custom_prompt=compose_enrichment(
-            data.card_specs, data.custom_prompt, template.fields
-        ) or None,
+        custom_prompt=custom_prompt or None,
         subject_context=data.subject_context,
         dpi=data.dpi,
         max_workers=data.max_workers,
@@ -479,6 +547,8 @@ def generate_from_file(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
+    if data.topic:
+        raise HTTPException(400, "Topic generation must use POST /api/generate.")
     if not data.source_filename:
         raise HTTPException(400, "source_filename is required")
     # Only names the upload endpoint produces may be used as paths. This is
@@ -568,6 +638,64 @@ def get_generation(generation_id: str, db: Session = Depends(get_db)):
     gen = db.query(Generation).filter(Generation.id == generation_id).first()
     if not gen:
         raise HTTPException(404, "Generation not found")
+    return gen
+
+
+@router.post("/{generation_id}/rerun", response_model=GenerationSchema)
+def rerun_generation(
+    generation_id: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Start a new generation that copies this one's stored configuration.
+
+    The custom prompt is copied verbatim rather than re-submitted through
+    `compose_enrichment`: it was already composed when the original request was
+    saved, so re-composing would prepend the enrichment preamble twice. File
+    sources force reprocessing, since otherwise `ProcessedSlide` dedup would
+    skip every slide the original run already handled.
+    """
+    original = db.query(Generation).filter(Generation.id == generation_id).first()
+    if not original:
+        raise HTTPException(404, "Generation not found")
+
+    if not db.query(Provider).filter(Provider.id == original.provider_id).first():
+        raise HTTPException(400, "The provider used by this generation no longer exists")
+    if not db.query(CardTemplate).filter(CardTemplate.id == original.template_id).first():
+        raise HTTPException(400, "The card template used by this generation no longer exists")
+
+    if original.source_type == "file":
+        if not original.source_filename or not _UPLOAD_NAME_RE.fullmatch(
+            original.source_filename
+        ):
+            raise HTTPException(400, "This generation has no reusable source file")
+        if not os.path.exists(os.path.join(UPLOAD_DIR, original.source_filename)):
+            raise HTTPException(
+                400,
+                "The source upload is no longer available. Upload the file again.",
+            )
+
+    gen = Generation(
+        title=original.title,
+        source_type=original.source_type,
+        source_filename=original.source_filename,
+        source_text=original.source_text,
+        provider_id=original.provider_id,
+        model_name=original.model_name,
+        template_id=original.template_id,
+        deck_name=original.deck_name,
+        target_card_count=original.target_card_count,
+        custom_prompt=original.custom_prompt,
+        subject_context=original.subject_context,
+        dpi=original.dpi,
+        max_workers=original.max_workers,
+        status="pending",
+    )
+    db.add(gen)
+    db.commit()
+    db.refresh(gen)
+
+    background_tasks.add_task(_run_generation, gen.id, original.source_type == "file")
     return gen
 
 

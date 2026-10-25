@@ -104,6 +104,9 @@ class Generation(Base):
     source_type = Column(String, nullable=False)
     source_filename = Column(String, nullable=True)
     source_text = Column(Text, nullable=True)
+    # Topic generations only: how many cards the user asked for. NULL means
+    # "let the model decide". Persisted so a rerun is exact.
+    target_card_count = Column(Integer, nullable=True)
     provider_id = Column(String, ForeignKey("providers.id"), nullable=False, index=True)
     model_name = Column(String, nullable=False)
     template_id = Column(String, ForeignKey("card_templates.id"), nullable=False, index=True)

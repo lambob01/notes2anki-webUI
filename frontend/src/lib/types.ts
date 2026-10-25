@@ -36,26 +36,35 @@ export interface FieldDef {
   visible: boolean
 }
 
-export interface Generation {
+interface GenerationBase {
   id: string
   title: string | null
   source_type: string
-  source_filename: string | null
-  source_text: string | null
-  provider_id: string
+  deck_name: string
   model_name: string
   template_id: string
-  deck_name: string
-  custom_prompt: string | null
-  subject_context: string | null
   status: string
   phase: string | null
   total_slides: number
   completed_slides: number
   cards_generated: number
+  failed_slides: number
   error_message: string | null
   created_at: string
   completed_at: string | null
+}
+
+export interface GenerationSummary extends GenerationBase {
+  card_count: number
+}
+
+export interface Generation extends GenerationBase {
+  source_filename: string | null
+  source_text: string | null
+  target_card_count: number | null
+  provider_id: string
+  custom_prompt: string | null
+  subject_context: string | null
   cards: Card[]
 }
 
@@ -90,6 +99,8 @@ export interface GenerateRequest {
   custom_prompt?: string
   subject_context?: string
   card_specs?: string[]
+  topic?: string
+  target_card_count?: number | null
   source_text?: string
   source_title?: string
   source_filename?: string

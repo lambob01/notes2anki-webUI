@@ -1,39 +1,64 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useSyncExternalStore } from 'react'
 
 const THEME_KEY = 'notes2anki:theme'
 
 export type Theme = 'light' | 'dark'
 
-function getInitialTheme(): Theme {
+function readStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_KEY)
     if (stored === 'light' || stored === 'dark') return stored
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   } catch {
-    return 'light'
+    /* storage unavailable */
   }
+  // Dark is the product's default identity, not a system-preference derivation.
+  return 'dark'
+}
+
+function applyTheme(theme: Theme) {
+  if (typeof document === 'undefined') return
+  const root = document.documentElement
+  root.classList.toggle('dark', theme === 'dark')
+  const meta = document.querySelector('meta[name="theme-color"]')
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#08080a' : '#fafafa')
+}
+
+let current = readStoredTheme()
+const listeners = new Set<() => void>()
+
+if (typeof document !== 'undefined') applyTheme(current)
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  return () => listeners.delete(listener)
+}
+
+function getSnapshot(): Theme {
+  return current
+}
+
+function setTheme(next: Theme) {
+  if (next === current) return
+  current = next
+  applyTheme(next)
+  try {
+    localStorage.setItem(THEME_KEY, next)
+  } catch {
+    /* storage unavailable - theme just won't persist */
+  }
+  listeners.forEach((listener) => listener())
 }
 
 /**
- * Light/dark theme state. Toggling flips the `dark` class on <html> (Tailwind's
- * class dark mode) and persists the choice; the index.html inline script
- * mirrors this so there's no flash of light on load.
+ * Shared light/dark theme state. A module-level store keeps every consumer
+ * (sidebar, palette, appearance settings) in sync.
  */
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme)
-
-  useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark')
-    try {
-      localStorage.setItem(THEME_KEY, theme)
-    } catch {
-      /* storage unavailable - theme just won't persist */
-    }
-  }, [theme])
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
   const toggle = useCallback(() => {
-    setTheme((t) => (t === 'dark' ? 'light' : 'dark'))
+    setTheme(current === 'dark' ? 'light' : 'dark')
   }, [])
 
-  return { theme, toggle }
+  return { theme, toggle, setTheme }
 }

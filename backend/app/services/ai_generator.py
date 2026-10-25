@@ -65,6 +65,37 @@ CARD_COUNT_HINT = (
     "dense content should yield many."
 )
 
+TOPIC_PROMPT_HEADER = """You are an expert educator and spaced repetition card writer.
+
+The user's message is a request for study material, not a document or source text. Use your established knowledge to create accurate, self-contained Anki flashcards that teach the requested topic.
+
+Return a JSON object with exactly this shape:
+{shape}
+
+Each card object must contain exactly these fields:
+{field_docs}
+
+Rules:
+1. Answer the request directly. Never write cards about the request, the generation process, or the fact that the content was generated.
+2. Each card must test one idea only.
+3. Write explanatory study cards: the answer should explain the mechanism or reasoning and include a concrete example where it makes the idea clearer. Avoid one-word answers and bare restatements.
+4. Use plain text. Do not use Markdown, HTML, cloze syntax, or Anki-specific tags.
+5. Use LaTeX for mathematical expressions in any field. Inline math must use \\(...\\), display math must use \\[...\\]. Never use $...$ or <anki-mathjax>.
+6. Leave a field as an empty string when it is not relevant. Never omit a key.
+7. Do not invent citations, quotations, dates, or precise statistics. If a claim is uncertain, phrase it cautiously or leave it out. Prefer well-established knowledge.
+8. If the request is broad, cover the requested focus first, then the foundational ideas needed to understand it. Do not pad with filler.
+9. Return valid JSON only. No code fences or explanatory text.
+
+{subject_context}
+{card_count_hint}
+"""
+
+TOPIC_AUTO_COUNT_HINT = (
+    "Generate as many cards as the request warrants - no more, no less.\n"
+    "Cover the requested focus first, then the foundations needed to understand it.\n"
+    "Do not invent or restate material to make the set look fuller."
+)
+
 ENRICHMENT_HEADER = "ADDITIONAL REQUIREMENTS (from the user):"
 
 
@@ -91,16 +122,8 @@ LEGACY_FIELD_HINTS = {
 }
 
 
-def build_card_prompt(
-    template_fields: list[dict] | None,
-    subject_context: str | None,
-) -> str:
-    """Compose the system prompt from the note type's own field definitions.
-
-    A field's `description` is its instruction to the model - this is what
-    makes a user-defined note type actually steer generation rather than the
-    model guessing at a hardcoded field set.
-    """
+def _prompt_fields(template_fields: list[dict] | None) -> tuple[str, str]:
+    """Render the field instructions and JSON shape shared by both prompts."""
     fields = template_fields or [{"name": "prompt"}, {"name": "answer"}]
 
     field_docs = []
@@ -118,12 +141,50 @@ def build_card_prompt(
 
     names = [f.get("name") for f in fields if f.get("name")]
     shape = json.dumps({"cards": [{n: "" for n in names}]})
+    return "\n".join(field_docs), shape
 
+
+def build_card_prompt(
+    template_fields: list[dict] | None,
+    subject_context: str | None,
+) -> str:
+    """Compose the system prompt from the note type's own field definitions.
+
+    A field's `description` is its instruction to the model - this is what
+    makes a user-defined note type actually steer generation rather than the
+    model guessing at a hardcoded field set.
+    """
+    field_docs, shape = _prompt_fields(template_fields)
     return CARD_PROMPT_HEADER.format(
         shape=shape,
-        field_docs="\n".join(field_docs),
+        field_docs=field_docs,
         global_context=(f"Subject context: {subject_context}\n" if subject_context else ""),
         card_count_hint=CARD_COUNT_HINT,
+    )
+
+
+def _topic_count_hint(target_card_count: int | None) -> str:
+    if target_card_count:
+        return (
+            f"Generate exactly {target_card_count} cards. Each card must test a\n"
+            "distinct idea. If the request genuinely cannot support that many\n"
+            "distinct cards, return fewer rather than padding with filler."
+        )
+    return TOPIC_AUTO_COUNT_HINT
+
+
+def build_topic_prompt(
+    template_fields: list[dict] | None,
+    subject_context: str | None,
+    target_card_count: int | None = None,
+) -> str:
+    """Build the prompt for a plain-language request rather than source text."""
+    field_docs, shape = _prompt_fields(template_fields)
+    return TOPIC_PROMPT_HEADER.format(
+        shape=shape,
+        field_docs=field_docs,
+        subject_context=(f"Subject context: {subject_context}\n" if subject_context else ""),
+        card_count_hint=_topic_count_hint(target_card_count),
     )
 
 
@@ -152,6 +213,29 @@ def generate_cards_text(
         provider,
         model_name,
         [{"role": "user", "content": text}],
+        system=prompt,
+        field_names=_field_names(template_fields),
+    )
+    return _normalize_card_fields(cards, template_fields)
+
+
+def generate_cards_topic(
+    provider: ProviderConfig,
+    model_name: str,
+    topic: str,
+    template_fields: list[dict],
+    custom_prompt: str | None = None,
+    subject_context: str | None = None,
+    target_card_count: int | None = None,
+) -> list[dict]:
+    """Write cards from the model's knowledge for a plain-language request."""
+    prompt = build_topic_prompt(template_fields, subject_context, target_card_count)
+    prompt = _append_enrichment(prompt, custom_prompt)
+
+    cards = _call_llm(
+        provider,
+        model_name,
+        [{"role": "user", "content": topic}],
         system=prompt,
         field_names=_field_names(template_fields),
     )

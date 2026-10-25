@@ -1,15 +1,39 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { api } from '@/lib/api'
-import { Clock, CheckCircle, XCircle, Loader2, Trash2, Ban } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import toast from 'react-hot-toast'
+import { History, Plus, SearchX } from 'lucide-react'
+import { HistoryTable } from '@/components/HistoryTable'
+import {
+  HistorySort,
+  HistoryStatus,
+  HistoryToolbar,
+} from '@/components/HistoryToolbar'
+import {
+  Button,
+  buttonVariants,
+  ConfirmDialog,
+  EmptyState,
+  PageHeader,
+  Panel,
+  Skeleton,
+} from '@/components/ui'
+import { useGenerations } from '@/hooks/useActiveGeneration'
+import { api } from '@/lib/api'
 
 export default function HistoryPage() {
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const { data: generations, isLoading } = useQuery({
-    queryKey: ['generations'],
-    queryFn: api.generate.list,
-  })
+  const { data: generations, isLoading, isError, error } = useGenerations()
+
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState<HistoryStatus>('all')
+  const [sort, setSort] = useState<HistorySort>('newest')
+  const [action, setAction] = useState<null | {
+    type: 'rerun' | 'delete'
+    generation: any
+  }>(null)
+  const [clearOpen, setClearOpen] = useState(false)
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['generations'] })
 
@@ -19,7 +43,7 @@ export default function HistoryPage() {
       invalidate()
       toast.success('History cleared')
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (mutationError: any) => toast.error(mutationError.message),
   })
 
   const deleteOne = useMutation({
@@ -28,95 +52,210 @@ export default function HistoryPage() {
       invalidate()
       toast.success('Generation deleted')
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (mutationError: any) => toast.error(mutationError.message),
   })
 
-  const handleClearAll = () => {
-    if (!window.confirm('Delete all generations and their cards, slides, and uploads? This cannot be undone.')) return
-    clearAll.mutate()
+  const rerun = useMutation({
+    mutationFn: (id: string) => api.generate.rerun(id),
+    onSuccess: (generation: any) => {
+      invalidate()
+      toast.success('Generation restarted')
+      navigate(`/review/${generation.id}`)
+    },
+    onError: (mutationError: any) => toast.error(mutationError.message),
+  })
+
+  const all = useMemo(() => generations ?? [], [generations])
+
+  const counts: Record<HistoryStatus, number> = {
+    all: all.length,
+    completed: all.filter((generation: any) => generation.status === 'completed').length,
+    running: all.filter(
+      (generation: any) =>
+        generation.status === 'running' || generation.status === 'pending'
+    ).length,
+    failed: all.filter((generation: any) => generation.status === 'failed').length,
+    cancelled: all.filter((generation: any) => generation.status === 'cancelled').length,
   }
 
-  const handleDelete = (g: any) => {
-    if (!window.confirm(`Delete "${g.title}" and its cards? This cannot be undone.`)) return
-    deleteOne.mutate(g.id)
+  const filtered = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    const result = all.filter((generation: any) => {
+      const matchesSearch =
+        !query ||
+        [generation.title, generation.model_name, generation.deck_name]
+          .filter(Boolean)
+          .some((value) => String(value).toLowerCase().includes(query))
+      const matchesStatus =
+        status === 'all' ||
+        (status === 'running'
+          ? generation.status === 'running' || generation.status === 'pending'
+          : generation.status === status)
+      return matchesSearch && matchesStatus
+    })
+
+    return [...result].sort((a: any, b: any) => {
+      if (sort === 'cards') return (b.card_count ?? 0) - (a.card_count ?? 0)
+      const aTime = new Date(a.created_at).getTime()
+      const bTime = new Date(b.created_at).getTime()
+      return sort === 'oldest' ? aTime - bTime : bTime - aTime
+    })
+  }, [all, search, sort, status])
+
+  const clearFilters = () => {
+    setSearch('')
+    setStatus('all')
+    setSort('newest')
   }
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center gap-3 text-gray-500 dark:text-gray-400">
-        <Loader2 className="w-5 h-5 animate-spin" />
-        Loading history...
-      </div>
-    )
-  }
-
-  const empty = !generations || generations.length === 0
+  const empty = !isLoading && all.length === 0
+  const noMatches = !isLoading && all.length > 0 && filtered.length === 0
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Generation History</h1>
-          <p className="text-gray-500 mt-1 dark:text-gray-400">View and manage past card generations</p>
-        </div>
-        <button
-          onClick={handleClearAll}
-          disabled={empty || clearAll.isPending}
-          className="px-4 py-2 text-sm font-medium text-red-600 border border-red-300 rounded-lg hover:bg-red-50 disabled:opacity-40 dark:text-red-400 dark:border-red-800 dark:hover:bg-red-900/20"
-        >
-          {clearAll.isPending ? 'Clearing...' : 'Clear All'}
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Library"
+        title="Generation history"
+        description="Reopen a run, replay it with the same settings, or clear space."
+        actions={
+          <>
+            <Button
+              variant="danger"
+              onClick={() => setClearOpen(true)}
+              disabled={empty || clearAll.isPending || counts.running > 0}
+              title={
+                counts.running > 0
+                  ? 'Wait for active runs to finish before clearing history'
+                  : undefined
+              }
+            >
+              Clear all
+            </Button>
+            <Link to="/" className={buttonVariants({ variant: 'primary' })}>
+              <Plus className="h-3.5 w-3.5" />
+              New generation
+            </Link>
+          </>
+        }
+      />
 
-      {empty ? (
-        <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-          <Clock className="w-10 h-10 mx-auto mb-3" />
-          <p>No generations yet. Create one from the Dashboard.</p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {generations.map((g: any) => (
-            <div key={g.id} className="flex items-center gap-2 p-4 bg-white border border-gray-200 rounded-xl hover:shadow-sm transition-shadow dark:bg-gray-800 dark:border-gray-700">
-              <Link to={`/review/${g.id}`} className="flex flex-1 items-center gap-4">
-                {g.status === 'completed' && <CheckCircle className="w-5 h-5 text-green-500" />}
-                {g.status === 'failed' && <XCircle className="w-5 h-5 text-red-500" />}
-                {g.status === 'cancelled' && <Ban className="w-5 h-5 text-amber-500" />}
-                {g.status === 'running' && <Loader2 className="w-5 h-5 text-red-500 animate-spin" />}
-                {g.status === 'pending' && <Clock className="w-5 h-5 text-gray-400" />}
+      {!empty ? (
+        <HistoryToolbar
+          search={search}
+          onSearchChange={setSearch}
+          status={status}
+          onStatusChange={setStatus}
+          sort={sort}
+          onSortChange={setSort}
+          counts={counts}
+          resultCount={filtered.length}
+        />
+      ) : null}
 
-                <div className="flex-1">
-                  <p className="text-sm font-medium">{g.title}</p>
-                  <p className="text-xs text-gray-400">
-                    {g.model_name} &middot; {g.deck_name} &middot; {g.card_count ?? g.cards_generated ?? 0} cards
-                  </p>
-                </div>
-
-                <div className="text-xs text-gray-400">
-                  {new Date(g.created_at).toLocaleDateString()}
-                </div>
-
-                <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                  g.status === 'completed' ? 'bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-300' :
-                  g.status === 'failed' ? 'bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
-                  g.status === 'cancelled' ? 'bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' :
-                  g.status === 'running' ? 'bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300' :
-                  'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300'
-                }`}>
-                  {g.status}
-                </span>
-              </Link>
-              <button
-                onClick={() => handleDelete(g)}
-                disabled={deleteOne.isPending}
-                aria-label={`Delete ${g.title}`}
-                className="p-2 text-gray-400 hover:text-red-600 rounded-lg hover:bg-red-50 dark:hover:text-red-400 dark:hover:bg-red-900/20"
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
+      {isLoading ? (
+        <Panel className="divide-y divide-line">
+          {[0, 1, 2, 3, 4].map((index) => (
+            <div key={index} className="flex items-center gap-4 px-4 py-4">
+              <Skeleton className="h-5 w-20" />
+              <Skeleton className="h-4 flex-1" />
+              <Skeleton className="h-4 w-28" />
+              <Skeleton className="h-4 w-12" />
             </div>
           ))}
-        </div>
+        </Panel>
+      ) : isError ? (
+        <EmptyState
+          icon={SearchX}
+          title="Could not load history"
+          description={(error as Error)?.message ?? 'The server did not respond.'}
+        />
+      ) : empty ? (
+        <EmptyState
+          icon={History}
+          title="No generations yet"
+          description="Your first run will appear here with its cards, slides, and exports."
+          action={
+            <Link to="/" className={buttonVariants({ variant: 'primary' })}>
+              Create your first generation
+            </Link>
+          }
+        />
+      ) : noMatches ? (
+        <EmptyState
+          icon={SearchX}
+          title="No matching generations"
+          description="Try a different search or clear the status filter."
+          action={
+            <Button variant="secondary" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          }
+        />
+      ) : (
+        <HistoryTable
+          generations={filtered}
+          rerunningId={rerun.isPending ? (rerun.variables as string) : null}
+          onRerun={(generation) => setAction({ type: 'rerun', generation })}
+          onDelete={(generation) => setAction({ type: 'delete', generation })}
+        />
       )}
+
+      <ConfirmDialog
+        open={action?.type === 'rerun'}
+        onOpenChange={(open) => {
+          if (!open) setAction(null)
+        }}
+        title="Run this generation again?"
+        description="A new run starts with the same provider, model, template, source, and instructions."
+        confirmLabel="Run again"
+        confirming={rerun.isPending}
+        onConfirm={() => {
+          if (action?.generation) rerun.mutate(action.generation.id)
+          setAction(null)
+        }}
+      >
+        <p className="text-[13px] leading-relaxed text-muted">
+          This uses your provider credits. File-based runs reprocess every slide so the
+          replay is not silently skipped.
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={action?.type === 'delete'}
+        onOpenChange={(open) => {
+          if (!open) setAction(null)
+        }}
+        title="Delete this generation?"
+        description="Its cards, slide images, and export files are removed. This cannot be undone."
+        confirmLabel="Delete generation"
+        destructive
+        confirming={deleteOne.isPending}
+        onConfirm={() => {
+          if (action?.generation) deleteOne.mutate(action.generation.id)
+          setAction(null)
+        }}
+      >
+        <p className="text-[13px] leading-relaxed text-muted">
+          {action?.generation?.title || 'Untitled generation'} ·{' '}
+          {action?.generation?.card_count ?? 0} cards
+        </p>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={clearOpen}
+        onOpenChange={setClearOpen}
+        title="Clear all history?"
+        description="Every generation, card, slide image, and export is deleted."
+        confirmLabel="Clear everything"
+        destructive
+        confirming={clearAll.isPending}
+        onConfirm={() => clearAll.mutate()}
+      >
+        <p className="text-[13px] leading-relaxed text-muted">
+          Uploaded source files are kept only while another generation references them.
+          This cannot be undone.
+        </p>
+      </ConfirmDialog>
     </div>
   )
 }
